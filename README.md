@@ -2,13 +2,23 @@
 
 *A real-time MIDI tool that extends existing hardware synth capabilities.*
 
+## Disclaimer
+
+The project is currently in VEAS (very early alpha stage).
+
 ## Project Vision
 
 `uncycle` aims to be an open-source, cross-platform MIDI swiss-knife designed to augment your existing hardware instruments rather than replace them. Born from the philosophy of "anti-anti-consumerism," this project helps you get more creative mileage from your current devices.
 
+## Supported Devices
+
+| Manufacturer | Name | MIDI monitoring | MIDI augmentation |
+| ------------ | ---- | :-------------: | :---------------: |
+| Roland       | TR-8 |     mostly      |        TBA        |
+
 ## TUI
 
-TODO: insert screenshot
+![test](doc/screenshot_alpha_tr8.png)
 
 ### Build
 
