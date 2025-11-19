@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     prelude::Stylize,
@@ -50,6 +52,9 @@ const TR_8_NOTES: [u8; TR_8_STEPS] = [
     TR_8_OH_NOTE,
     TR_8_CC_NOTE,
     TR_8_RC_NOTE,
+    //
+    // | these might be unsupported if 727 update has not been flashed on device
+    // v
     TR_8_BD2_NOTE,
     TR_8_SD2_NOTE,
     TR_8_CB_NOTE,
@@ -138,9 +143,22 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 ///////////////////////
 
 fn render_instruments(f: &mut Frame, area: Rect, volume: &[u8; TR_8_INTRUMENTS]) {
+    let constr_ratio = TR_8_INTRUMENTS as u32 + 2;
     let steps = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Ratio(1, TR_8_INTRUMENTS as u32); TR_8_INTRUMENTS])
+        .constraints([
+            Constraint::Ratio(2, constr_ratio), // BD has more area
+            Constraint::Ratio(2, constr_ratio), // SD has more area
+            Constraint::Ratio(1, constr_ratio),
+            Constraint::Ratio(1, constr_ratio),
+            Constraint::Ratio(1, constr_ratio),
+            Constraint::Ratio(1, constr_ratio),
+            Constraint::Ratio(1, constr_ratio),
+            Constraint::Ratio(1, constr_ratio),
+            Constraint::Ratio(1, constr_ratio),
+            Constraint::Ratio(1, constr_ratio),
+            Constraint::Ratio(1, constr_ratio),
+        ])
         .split(area);
 
     for i in 0..steps.len() {
@@ -156,7 +174,12 @@ fn render_lines<const DIV: u32>(f: &mut Frame, area: Rect) {
         .split(area);
 
     for i in 0..lines.len() {
-        f.render_widget(white_line(), lines[i]);
+        f.render_widget(
+            Block::bordered()
+                .border_set(symbols::border::QUADRANT_OUTSIDE)
+                .border_style(Style::reset().fg(Color::DarkGray).reversed()),
+            lines[i],
+        );
     }
 }
 
@@ -189,7 +212,7 @@ fn tr8_step<'a>(title: &'a str, step: usize, is_active: bool) -> impl Widget + '
     let c;
     match step as u16 {
         0..=3 => c = Color::Red,
-        4..=7 => c = Color::Yellow,
+        4..=7 => c = Color::from_str("#ff8800ff").unwrap_or(Color::Yellow),
         8..=11 => c = Color::LightYellow,
         12..=u16::MAX => c = Color::White,
     }
@@ -206,11 +229,4 @@ fn tr8_step<'a>(title: &'a str, step: usize, is_active: bool) -> impl Widget + '
     } else {
         return b;
     }
-}
-
-fn white_line<'a>() -> impl Widget + 'a {
-    Block::bordered()
-        .border_set(symbols::border::QUADRANT_OUTSIDE)
-        .border_style(Style::reset().fg(Color::White).reversed())
-        .style(Style::default().bg(Color::White))
 }
