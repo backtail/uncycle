@@ -37,7 +37,7 @@ enum AppTab {
 pub struct App {
     state: UncycleState,
     keybindings: Keybindings,
-    midi_state: Arc<Mutex<MidiState>>,
+    pub midi_state: Arc<Mutex<MidiState>>,
     current_tab: AppTab,
     should_quit: bool,
 }

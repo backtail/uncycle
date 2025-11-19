@@ -1,4 +1,5 @@
 mod app;
+mod device;
 mod keybindings;
 mod midi;
 mod state;
