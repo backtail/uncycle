@@ -7,9 +7,9 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     backend::Backend,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Margin},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Paragraph, Tabs},
+    widgets::{Block, Tabs},
     Frame, Terminal,
 };
 
@@ -122,19 +122,10 @@ fn ui(f: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .margin(0)
         .constraints([
-            Constraint::Length(3), // Header
             Constraint::Length(3), // Tabs
             Constraint::Min(10),   // Main content
-            Constraint::Length(3), // Footer
         ])
         .split(f.area());
-
-    // Header
-    let header = Paragraph::new("uncycle v0.1.0_alpha")
-        .style(Style::default().add_modifier(Modifier::BOLD))
-        .alignment(ratatui::layout::Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-    f.render_widget(header, chunks[0]);
 
     // Tabs
     let tabs = Tabs::new(vec![
@@ -144,7 +135,8 @@ fn ui(f: &mut Frame, app: &App) {
         "[4] Settings",
         "[5] Help",
     ])
-    .block(Block::default().borders(Borders::ALL))
+    .padding(" ", " ")
+    .block(Block::default())
     .select(match app.current_tab {
         AppTab::Main => 0,
         AppTab::Device => 1,
@@ -152,26 +144,25 @@ fn ui(f: &mut Frame, app: &App) {
         AppTab::Settings => 3,
         AppTab::Help => 4,
     })
-    .style(Style::default().fg(Color::White))
+    .style(Style::default().fg(Color::DarkGray))
     .highlight_style(
         Style::default()
             .fg(Color::Green)
             .add_modifier(Modifier::BOLD),
     );
-    f.render_widget(tabs, chunks[1]);
+    f.render_widget(tabs, chunks[0]);
+
+    let main_area = chunks[1].inner(Margin {
+        horizontal: 1,
+        vertical: 1,
+    });
 
     // Main content based on current tab
     match app.current_tab {
-        AppTab::Main => render_main_tab(f, app, chunks[2]),
-        AppTab::Device => render_device_tab(f, app, chunks[2]),
-        AppTab::Midi => render_midi_tab(f, app, chunks[2]),
-        AppTab::Settings => render_settings_tab(f, app, chunks[2]),
-        AppTab::Help => render_help_tab(f, app, chunks[2]),
+        AppTab::Main => render_main_tab(f, app, main_area),
+        AppTab::Device => render_device_tab(f, app, main_area),
+        AppTab::Midi => render_midi_tab(f, app, main_area),
+        AppTab::Settings => render_settings_tab(f, app, main_area),
+        AppTab::Help => render_help_tab(f, app, main_area),
     }
-
-    // Footer
-    let footer = Paragraph::new("Q to quit")
-        .style(Style::default().fg(Color::Gray))
-        .alignment(ratatui::layout::Alignment::Center);
-    f.render_widget(footer, chunks[3]);
 }
