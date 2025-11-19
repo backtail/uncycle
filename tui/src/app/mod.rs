@@ -94,7 +94,7 @@ pub fn run_app<B: Backend>(
         terminal.draw(|f| ui(f, app))?;
 
         // Handle events with timeout to check for MIDI redraw signals
-        if crossterm::event::poll(Duration::from_millis(1))? {
+        if crossterm::event::poll(Duration::from_millis(16))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     app.on_key(key.code);
