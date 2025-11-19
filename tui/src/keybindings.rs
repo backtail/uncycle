@@ -98,7 +98,7 @@ impl Keybindings {
             .map(|binding| &binding.action)
     }
 
-    pub fn get_all_bindings(&self) -> &[KeyAction] {
+    pub fn _get_all_bindings(&self) -> &[KeyAction] {
         &self.bindings
     }
 
