@@ -28,7 +28,7 @@ The project is currently in VEAS (very early alpha stage).
 ```bash
 # without flakes
 nix-build 
-./result/bin/<package-name>
+./result/bin/uncycle-tui
 
 # with flakes
 nix run 
