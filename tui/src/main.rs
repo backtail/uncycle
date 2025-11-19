@@ -10,9 +10,96 @@ use crossterm::{
 };
 use std::io;
 use std::io::Write;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use keybindings::{Keybindings, Action};
 use state::UncycleState;
+
+// MIDI note representation
+#[derive(Clone)]
+struct MidiNote {
+    pub note: u8,
+    pub velocity: u8,
+    pub timestamp: Instant,
+    pub active: bool,
+}
+
+impl MidiNote {
+    fn new(note: u8, velocity: u8) -> Self {
+        Self {
+            note,
+            velocity,
+            timestamp: Instant::now(),
+            active: true,
+        }
+    }
+}
+
+struct MidiState {
+    pub active_notes: Vec<MidiNote>,
+    pub last_note: Option<MidiNote>,
+    pub error: Option<String>,
+}
+
+impl MidiState {
+    fn new() -> Self {
+        Self {
+            active_notes: Vec::new(),
+            last_note: None,
+            error: None,
+        }
+    }
+
+    fn add_note(&mut self, note: u8, velocity: u8) {
+        let midi_note = MidiNote::new(note, velocity);
+        self.active_notes.push(midi_note.clone());
+        self.last_note = Some(midi_note);
+        
+        // Clean up old notes (keep only from last 2 seconds)
+        let now = Instant::now();
+        self.active_notes.retain(|n| now.duration_since(n.timestamp) < Duration::from_secs(2));
+    }
+
+    fn remove_note(&mut self, note: u8) {
+        if let Some(found_note) = self.active_notes.iter_mut().find(|n| n.note == note) {
+            found_note.active = false;
+        }
+    }
+
+    fn set_error(&mut self, error: String) {
+        self.error = Some(error);
+    }
+
+    fn get_note_display(&self) -> String {
+        if let Some(error) = &self.error {
+            return format!("MIDI Error: {}", error);
+        }
+
+        if let Some(last_note) = &self.last_note {
+            if last_note.timestamp.elapsed() < Duration::from_secs(1) {
+                let note_name = Self::get_note_name(last_note.note);
+                return format!("♪ {} ({}) vel:{}", note_name, last_note.note, last_note.velocity);
+            }
+        }
+        
+        // Show active notes if any
+        let active_count = self.active_notes.iter().filter(|n| n.active).count();
+        if active_count > 0 {
+            format!("♪ {} note(s) active", active_count)
+        } else {
+            "No MIDI input".to_string()
+        }
+    }
+
+    fn get_note_name(note: u8) -> String {
+        let notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        let octave = (note / 12) as i8 - 1;
+        let note_index = (note % 12) as usize;
+        format!("{}{}", notes[note_index], octave)
+    }
+}
 
 struct TerminalBuffer {
     width: u16,
@@ -65,6 +152,97 @@ impl TerminalBuffer {
     }
 }
 
+fn setup_midi_input(midi_state: Arc<Mutex<MidiState>>) {
+    thread::spawn(move || {
+        midi_input_thread(midi_state);
+    });
+}
+
+fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
+    let input = match midir::MidiInput::new("uncycle_midi_input") {
+        Ok(input) => input,
+        Err(e) => {
+            let mut state = midi_state.lock().unwrap();
+            state.set_error(format!("Failed to create MIDI input: {}", e));
+            return;
+        }
+    };
+    
+    let in_ports = input.ports();
+    
+    if in_ports.is_empty() {
+        let mut state = midi_state.lock().unwrap();
+        state.set_error("No MIDI input ports available".to_string());
+        return;
+    }
+
+    // // eprintln!("Available MIDI ports:");
+    // for (i, port) in in_ports.iter().enumerate() {
+        // eprintln!("{}: {}", i, input.port_name(port).unwrap_or_else(|_| "Unknown".to_string()));
+    // }
+
+    // Use the first available port
+    let in_port = &in_ports[0];
+    let port_name = match input.port_name(in_port) {
+        Ok(name) => name,
+        Err(e) => {
+            let mut state = midi_state.lock().unwrap();
+            state.set_error(format!("Failed to get port name: {}", e));
+            return;
+        }
+    };
+    
+    // eprintln!("Using MIDI port: {}", port_name);
+
+    // Connect without using ? operator - handle the Result manually
+    let conn_result = input.connect(
+        in_port,
+        "uncycle-midi-in",
+        move |_timestamp, message, _| {
+            if message.len() >= 3 {
+                let status = message[0];
+                let data1 = message[1];
+                let data2 = message[2];
+                
+                // Note On (0x90-0x9F) or Note Off (0x80-0x8F)
+                let message_type = status & 0xF0;
+                
+                let mut state = midi_state.lock().unwrap();
+                
+                match message_type {
+                    0x90 => { // Note On
+                        if data2 > 0 { // Velocity > 0
+                            state.add_note(data1, data2);
+                        } else { // Note Off with velocity 0
+                            state.remove_note(data1);
+                        }
+                    }
+                    0x80 => { // Note Off
+                        state.remove_note(data1);
+                    }
+                    _ => {
+                        // Other MIDI messages (CC, pitch bend, etc.)
+                    }
+                }
+            }
+        },
+        (),
+    );
+
+    match conn_result {
+        Ok(conn) => {
+            // Keep the connection alive - the connection will be dropped when this thread ends
+            loop {
+                thread::sleep(Duration::from_secs(1));
+            }
+        }
+        Err(e) => {
+            // let mut state = midi_state.lock().unwrap();
+            // state.set_error(format!("Failed to connect to MIDI port: {}", e));
+        }
+    }
+}
+
 fn main() -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
@@ -75,8 +253,14 @@ fn main() -> Result<()> {
     let mut state = UncycleState::new();
     let keybindings = Keybindings::new();
     
+    // Create MIDI state
+    let midi_state = Arc::new(Mutex::new(MidiState::new()));
+    
+    // Setup MIDI input
+    setup_midi_input(midi_state.clone());
+    
     // Run the application
-    let result = run_app(&mut state, &keybindings);
+    let result = run_app(&mut state, &keybindings, midi_state);
     
     // Cleanup
     execute!(stdout, Show, LeaveAlternateScreen)?;
@@ -85,7 +269,7 @@ fn main() -> Result<()> {
     result
 }
 
-fn run_app(state: &mut UncycleState, keybindings: &Keybindings) -> Result<()> {
+fn run_app(state: &mut UncycleState, keybindings: &Keybindings, midi_state: Arc<Mutex<MidiState>>) -> Result<()> {
     let mut is_running = true;
     let terminal_size = size()?;
     
@@ -94,7 +278,7 @@ fn run_app(state: &mut UncycleState, keybindings: &Keybindings) -> Result<()> {
     let mut previous_buffer = TerminalBuffer::new(terminal_size.0, terminal_size.1);
     
     // Initial draw
-    draw_ui(state, &keybindings, &mut current_buffer, terminal_size)?;
+    draw_ui(state, &keybindings, &mut current_buffer, terminal_size, &midi_state)?;
     current_buffer.render(&previous_buffer)?;
     std::mem::swap(&mut current_buffer, &mut previous_buffer);
     
@@ -106,16 +290,22 @@ fn run_app(state: &mut UncycleState, keybindings: &Keybindings) -> Result<()> {
             let mut new_current = TerminalBuffer::new(new_size.0, new_size.1);
             let new_previous = TerminalBuffer::new(new_size.0, new_size.1);
             
-            draw_ui(state, &keybindings, &mut new_current, new_size)?;
+            draw_ui(state, &keybindings, &mut new_current, new_size, &midi_state)?;
             new_current.render(&new_previous)?;
             
             current_buffer = new_current;
             previous_buffer = new_previous;
         } else {
-            // Only redraw if something changed
-            if state.needs_redraw(new_size) {
+            // Always redraw when we have MIDI input to show real-time updates
+            let needs_redraw = state.needs_redraw(new_size) || {
+                let midi_state = midi_state.lock().unwrap();
+                midi_state.last_note.is_some() && 
+                midi_state.last_note.as_ref().unwrap().timestamp.elapsed() < Duration::from_millis(100)
+            };
+            
+            if needs_redraw {
                 current_buffer.clear();
-                draw_ui(state, &keybindings, &mut current_buffer, new_size)?;
+                draw_ui(state, &keybindings, &mut current_buffer, new_size, &midi_state)?;
                 current_buffer.render(&previous_buffer)?;
                 std::mem::swap(&mut current_buffer, &mut previous_buffer);
             }
@@ -145,7 +335,13 @@ fn run_app(state: &mut UncycleState, keybindings: &Keybindings) -> Result<()> {
     Ok(())
 }
 
-fn draw_ui(state: &UncycleState, keybindings: &Keybindings, buffer: &mut TerminalBuffer, (cols, rows): (u16, u16)) -> Result<()> {
+fn draw_ui(
+    state: &UncycleState, 
+    keybindings: &Keybindings, 
+    buffer: &mut TerminalBuffer, 
+    (cols, rows): (u16, u16),
+    midi_state: &Arc<Mutex<MidiState>>
+) -> Result<()> {
     // Draw static header - centered
     let title = "uncycle - MIDI Looper";
     let title_x = if cols > title.len() as u16 {
@@ -162,7 +358,12 @@ fn draw_ui(state: &UncycleState, keybindings: &Keybindings, buffer: &mut Termina
     let status_y = 4;
     buffer.write_str(0, status_y, &format!("Status: {}", state.status()));
     buffer.write_str(0, status_y + 1, &format!("Loop count: {}", state.loop_count));
-    buffer.write_str(0, status_y + 2, &format!("Terminal: {}x{}", cols, rows));
+    
+    // Draw MIDI status
+    let midi_state_guard = midi_state.lock().unwrap();
+    let midi_display = midi_state_guard.get_note_display();
+    buffer.write_str(0, status_y + 2, &format!("MIDI: {}", midi_display));
+    buffer.write_str(0, status_y + 3, &format!("Terminal: {}x{}", cols, rows));
     
     // Draw controls section
     let controls_y = 8;
