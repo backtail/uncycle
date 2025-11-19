@@ -1,67 +1,46 @@
 # uncycle
 
-> **Break the upgrade cycle** - A modular MIDI looper that extends the life of your existing gear
+*A real-time MIDI tool that extends existing hardware synth capabilities.*
 
 ## Project Vision
 
-`uncycle` is an open-source, cross-platform MIDI looper designed to augment your existing hardware instruments rather than replace them. Born from the philosophy of "anti-anti-consumerism," this project helps you get more creative mileage from your current setup without constantly chasing the next hardware upgrade.
+`uncycle` aims to be an open-source, cross-platform MIDI swiss-knife designed to augment your existing hardware instruments rather than replace them. Born from the philosophy of "anti-anti-consumerism," this project helps you get more creative mileage from your current devices.
+
+## TUI
+
+TODO: insert screenshot
+
+### Build
+
+**Using `nix` (Recommended):**
+
+[Install nix](https://nix.dev/install-nix.html), the package manager, on your system. You don't have to install Rust at all with this method. Entering the dev shell might take some time the very first time.
+```bash
+nix-build tui.nix
+```
+
+**Using `cargo`:**
+
+[Install Rust](https://rust-lang.org/tools/install/) and make sure to use at least version 1.88.0.
+
+```bash
+cargo run --release
+```
+
+
+## Core Library
+
+Seperating the internal MIDI and business logic from the TUI is planned soon. It will become a `no_std` crate and provide a `cbindgen` API for crosscompiling on embedded platforms with C.
+
+## Hardware
+
+The long-term plan is to run this software on dedicated hardware, i.e. a small stompbox, so that a true DAW-less or PC-less setup can be achieved. Developing in a TUI is a lot less work to get going, though.
 
 ## Project Structure
 
 ```shell
 uncycle/
-├── Cargo.toml              # Workspace manifest
-├── shell.nix               # Nix development environment
-├── lib/                    # Core MIDI looper engine
-│   ├── Cargo.toml
-│   └── src/
-│       └── lib.rs          # (Planned) Core library
-└── tui/                    # Terminal User Interface
-    ├── Cargo.toml
-    └── src/
-        ├── main.rs         # Application entry point
-        ├── keybindings.rs  # Key binding configuration
-        └── state.rs        # Application state management
-```
-
-
-## Current Status: **Phase 1 - TUI Development**
-
-## Layered Architecture
-
-```
-┌─────────────────┐
-│    Frontend     │  (TUI, GUI, Embedded UI)
-│  (Application)  │
-└─────────────────┘
-         │
-┌─────────────────┐
-│   Core API      │  (C-compatible, thin wrapper)
-│  (uncycle.h)    │
-└─────────────────┘
-         │
-┌─────────────────┐
-│  Engine Layer   │  (Pure Rust business logic)
-│ (State Machine) │
-└─────────────────┘
-         │
-┌─────────────────┐
-│  MIDI Layer     │  (Platform-specific backends)
-│   (Backends)    │
-└─────────────────┘
-```
-### Key Bindings
-- `R` - Start recording
-- `S` - Stop recording/playback  
-- `P` - Start playback
-- `Space` - Toggle play/stop
-- `C` - Clear loop count
-- `Q` - Quit application
-
-### Development Setup
-
-**Using Nix (Recommended):**
-```bash
-nix-shell
-cargo run --package uncycle-tui
+├── core/   # (planned) platform-agnostic logic
+├── fw/     # (planned) firmware for embedded device
+└── tui/    # frontend and backend for PC use
 ```
