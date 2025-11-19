@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 // MIDI note representation
 #[derive(Clone)]
 pub struct MidiNote {
@@ -36,6 +38,14 @@ pub struct MidiState {
     pub error: Option<String>,
     pub note_count: u32,
     pub message_log: Vec<String>,
+
+    pub output_connection: Option<midir::MidiOutputConnection>,
+    pub _input_connected: bool,
+    pub _output_connected: bool,
+    pub _clock_running: bool,
+    pub clock_bpm: f64,
+    pub last_clock_time: Option<Instant>,
+    pub clock_pulse_count: u32,
 }
 
 impl MidiState {
@@ -47,6 +57,14 @@ impl MidiState {
             error: None,
             note_count: 0,
             message_log: Vec::new(),
+
+            output_connection: None,
+            _input_connected: false,
+            _output_connected: false,
+            _clock_running: false,
+            clock_bpm: 120.0,
+            last_clock_time: None,
+            clock_pulse_count: 0,
         }
     }
 

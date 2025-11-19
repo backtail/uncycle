@@ -16,12 +16,13 @@ use ratatui::{
 use std::{
     sync::{mpsc, Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use keybindings::{Action, Keybindings};
 use state::UncycleState;
 
+use connection::update_midi_clock;
 use midi::MidiState;
 use tabs::*;
 
@@ -89,6 +90,9 @@ pub fn run_app<B: Backend>(
     app: &mut App,
     redraw_rx: mpsc::Receiver<()>,
 ) -> Result<()> {
+    let mut last_clock_check = Instant::now();
+    let clock_check_interval = Duration::from_millis(1); // Check every 1ms for accuracy
+
     while !app.should_quit {
         // Draw UI
         terminal.draw(|f| ui(f, app))?;
@@ -106,6 +110,11 @@ pub fn run_app<B: Backend>(
                 // Force redraw on next iteration
                 continue;
             }
+        }
+
+        if last_clock_check.elapsed() >= clock_check_interval {
+            last_clock_check = Instant::now();
+            update_midi_clock(&app.midi_state)?;
         }
 
         // Simulate loop progression
