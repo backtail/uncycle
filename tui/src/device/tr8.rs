@@ -13,6 +13,13 @@ use ratatui::{
 use crate::app::App;
 
 const TR_8_INTRUMENTS: usize = 11;
+const TR_8_STEPS: usize = TR_8_INTRUMENTS + 5;
+
+const TR_8_STEP_NAME: [&'static str; TR_8_STEPS] = [
+    "BD", "SD", "LT", "MT", "HT", "RS", "HC", "CH", "OH", "CC", "RC", "", "", "", "", "",
+];
+
+// relevant notes to check
 
 const TR_8_BD_NOTE: u8 = 36;
 const TR_8_SD_NOTE: u8 = 38;
@@ -30,11 +37,6 @@ const TR_8_BD2_NOTE: u8 = 35;
 const TR_8_SD2_NOTE: u8 = 40;
 const TR_8_CB_NOTE: u8 = 56;
 const TR_8_TB_NOTE: u8 = 54;
-
-const TR_8_STEPS: usize = TR_8_INTRUMENTS + 5;
-const TR_8_STEP_NAME: [&'static str; TR_8_STEPS] = [
-    "BD", "SD", "LT", "MT", "HT", "RS", "HC", "CH", "OH", "CC", "RC", "", "", "", "", "",
-];
 
 const TR_8_NOTES: [u8; TR_8_STEPS] = [
     TR_8_BD_NOTE,
@@ -55,18 +57,50 @@ const TR_8_NOTES: [u8; TR_8_STEPS] = [
     0,
 ];
 
+// relevant CC numbers to check
+
+const TR_8_BD_CC_VOL: u8 = 24;
+const TR_8_SD_CC_VOL: u8 = 29;
+const TR_8_LT_CC_VOL: u8 = 48;
+const TR_8_MT_CC_VOL: u8 = 51;
+const TR_8_HT_CC_VOL: u8 = 54;
+const TR_8_RS_CC_VOL: u8 = 57;
+const TR_8_HC_CC_VOL: u8 = 60;
+const TR_8_CH_CC_VOL: u8 = 63;
+const TR_8_OH_CC_VOL: u8 = 82;
+const TR_8_CC_CC_VOL: u8 = 85;
+const TR_8_RC_CC_VOL: u8 = 88;
+
+const TR_8_CC_VOL: [u8; TR_8_INTRUMENTS] = [
+    TR_8_BD_CC_VOL,
+    TR_8_SD_CC_VOL,
+    TR_8_LT_CC_VOL,
+    TR_8_MT_CC_VOL,
+    TR_8_HT_CC_VOL,
+    TR_8_RS_CC_VOL,
+    TR_8_HC_CC_VOL,
+    TR_8_CH_CC_VOL,
+    TR_8_OH_CC_VOL,
+    TR_8_CC_CC_VOL,
+    TR_8_RC_CC_VOL,
+];
+
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
     // MIDI data extraction
     ///////////////////////
 
     let mut current_active_steps: [bool; TR_8_STEPS] = [false; TR_8_STEPS];
-    let current_volume: [u8; TR_8_INTRUMENTS] = [0_u8; TR_8_INTRUMENTS];
+    let mut current_volume: [u8; TR_8_INTRUMENTS] = [0_u8; TR_8_INTRUMENTS];
 
     {
         let mut midi_state = app.midi_state.lock().unwrap();
 
         for i in 0..TR_8_STEPS {
             current_active_steps[i] = midi_state.find_active_note(TR_8_NOTES[i])
+        }
+
+        for i in 0..TR_8_INTRUMENTS {
+            current_volume[i] = midi_state.get_cc_val_of(TR_8_CC_VOL[i]);
         }
     }
 
@@ -77,20 +111,22 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             // volume
-            Constraint::Ratio(1, 3),
+            Constraint::Length(10),
             // placeholder
-            Constraint::Length(2),
+            Constraint::Length(1),
             // scale lines
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             //steps
-            Constraint::Ratio(1, 3),
+            Constraint::Length(10),
+            // placeholder
+            Constraint::Fill(1),
         ])
         .split(area);
 
-    render_instruments(f, vert[0]);
+    render_instruments(f, vert[0], &current_volume);
     render_lines::<6>(f, vert[2]);
     render_lines::<3>(f, vert[3]);
     render_lines::<4>(f, vert[4]);
@@ -101,14 +137,15 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 // Horizontal rendering
 ///////////////////////
 
-fn render_instruments(f: &mut Frame, area: Rect) {
+fn render_instruments(f: &mut Frame, area: Rect, volume: &[u8; TR_8_INTRUMENTS]) {
     let steps = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Ratio(1, TR_8_INTRUMENTS as u32); TR_8_INTRUMENTS])
         .split(area);
 
     for i in 0..steps.len() {
-        f.render_widget(fader(), steps[i]);
+        let pos = volume[i] as f64 / 127.0_f64;
+        f.render_widget(fader(pos), steps[i]);
     }
 }
 
@@ -137,14 +174,14 @@ fn render_steps(f: &mut Frame, area: Rect, is_active: &[bool; TR_8_STEPS]) {
 // Helper functions
 ///////////////////
 
-fn fader() -> impl Widget {
+fn fader(pos: f64) -> impl Widget {
     Canvas::default()
-        .paint(|ctx| {
-            ctx.draw(&canvas::Line::new(1.0, 0.0, 1.0, 1.0, Color::White));
-            ctx.draw(&canvas::Line::new(0.5, 0.5, 1.5, 0.5, Color::White));
+        .paint(move |ctx| {
+            ctx.draw(&canvas::Line::new(0.0, 0.0, 0.0, 1.0, Color::Green));
+            ctx.draw(&canvas::Line::new(-0.5, pos, 0.5, pos, Color::White));
         })
-        .marker(symbols::Marker::Block)
-        .x_bounds([0.0, 2.0])
+        .marker(symbols::Marker::Bar)
+        .x_bounds([-1.0, 1.0])
         .y_bounds([0.0, 1.0])
 }
 
@@ -171,7 +208,7 @@ fn tr8_step<'a>(title: &'a str, step: usize, is_active: bool) -> impl Widget + '
     }
 }
 
-fn white_line<'a>() -> Block<'a> {
+fn white_line<'a>() -> impl Widget + 'a {
     Block::bordered()
         .border_set(symbols::border::QUADRANT_OUTSIDE)
         .border_style(Style::reset().fg(Color::White).reversed())

@@ -6,6 +6,13 @@ pub struct MidiNote {
     pub active: bool,
 }
 
+// MIDI CC representation
+#[derive(Clone)]
+pub struct MidiCC {
+    pub cc_num: u8,
+    pub cc_val: u8,
+}
+
 impl MidiNote {
     fn new(note: u8, velocity: u8) -> Self {
         Self {
@@ -16,8 +23,15 @@ impl MidiNote {
     }
 }
 
+impl MidiCC {
+    fn new(cc_num: u8, cc_val: u8) -> Self {
+        Self { cc_num, cc_val }
+    }
+}
+
 pub struct MidiState {
     pub active_notes: Vec<MidiNote>,
+    pub last_cc: Vec<MidiCC>,
     pub last_note: Option<MidiNote>,
     pub error: Option<String>,
     pub note_count: u32,
@@ -28,6 +42,7 @@ impl MidiState {
     pub fn new() -> Self {
         Self {
             active_notes: Vec::new(),
+            last_cc: Vec::new(),
             last_note: None,
             error: None,
             note_count: 0,
@@ -42,12 +57,28 @@ impl MidiState {
         self.note_count += 1;
     }
 
+    pub fn update_cc(&mut self, cc_num: u8, cc_val: u8) {
+        if let Some(old) = self.last_cc.iter_mut().find(|n| n.cc_num == cc_num) {
+            old.cc_val = cc_val
+        } else {
+            self.last_cc.push(MidiCC::new(cc_num, cc_val));
+        }
+    }
+
     pub fn remove_note(&mut self, note: u8) {
         self.active_notes.retain(|n| n.note != note);
     }
 
     pub fn find_active_note(&mut self, note: u8) -> bool {
-        return self.active_notes.iter().find(|n| n.note == note).is_some();
+        self.active_notes.iter().find(|n| n.note == note).is_some()
+    }
+
+    pub fn get_cc_val_of(&mut self, cc_num: u8) -> u8 {
+        if let Some(exists) = self.last_cc.iter().find(|n| n.cc_num == cc_num) {
+            exists.cc_val
+        } else {
+            0
+        }
     }
 
     pub fn set_error(&mut self, error: String) {

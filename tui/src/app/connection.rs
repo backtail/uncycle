@@ -92,6 +92,7 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, redraw_tx: mpsc::Sender<
 
                     0xB0 => {
                         // Control Change
+                        state.update_cc(data1, data2);
                         state.add_message(format!("CC:       {:02} {:02}", data1, data2));
                     }
 
