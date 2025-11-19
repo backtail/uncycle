@@ -66,4 +66,5 @@ pkgs.mkShell {
 
   RUST_BACKTRACE = "full";
   RUST_LOG = "debug";
+  RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
 }
