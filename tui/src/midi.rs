@@ -43,9 +43,11 @@ impl MidiState {
     }
 
     pub fn remove_note(&mut self, note: u8) {
-        if let Some(found_note) = self.active_notes.iter_mut().find(|n| n.note == note) {
-            found_note.active = false;
-        }
+        self.active_notes.retain(|n| n.note != note);
+    }
+
+    pub fn find_active_note(&mut self, note: u8) -> bool {
+        return self.active_notes.iter().find(|n| n.note == note).is_some();
     }
 
     pub fn set_error(&mut self, error: String) {
