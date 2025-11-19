@@ -1,4 +1,4 @@
-use crate::{app, midi};
+use crate::app;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -8,10 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use std::time::Duration;
-
 use app::App;
-use midi::MidiState;
 
 pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
@@ -25,34 +22,13 @@ pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
     let midi_state = app.midi_state.lock().unwrap();
 
     // Current MIDI status
-    let active_notes_count = midi_state.active_notes.iter().filter(|n| n.active).count();
     let status_text = vec![
-        Line::from(format!("Active notes: {}", active_notes_count)),
         Line::from(format!("Last note: {}", midi_state.get_note_display())),
         Line::from(format!("Total notes received: {}", midi_state.note_count)),
-        Line::from(""),
-        Line::from("Recent active notes:"),
     ];
 
-    let recent_notes: Vec<Line> = midi_state
-        .active_notes
-        .iter()
-        .filter(|n| n.active && n.timestamp.elapsed() < Duration::from_secs(2))
-        .take(10)
-        .map(|n| {
-            let note_name = MidiState::get_note_name(n.note);
-            Line::from(format!(
-                "  ♪ {} ({}), vel: {}",
-                note_name, n.note, n.velocity
-            ))
-        })
-        .collect();
-
-    let mut all_status_text = status_text;
-    all_status_text.extend(recent_notes);
-
     let status_block = Block::default().title("MIDI Status").borders(Borders::ALL);
-    let status = Paragraph::new(all_status_text)
+    let status = Paragraph::new(status_text)
         .block(status_block)
         .wrap(Wrap { trim: true });
     f.render_widget(status, chunks[0]);
@@ -62,7 +38,7 @@ pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
         .message_log
         .iter()
         .rev() // Show newest first
-        .take(20) // Limit to 20 items
+        .take(50) // Limit to 50 items
         .map(|msg| ListItem::new(Line::from(msg.as_str())))
         .collect();
 
