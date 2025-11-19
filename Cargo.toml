@@ -1,0 +1,9 @@
+[workspace]
+members = ["tui"]
+resolver = "2"
+
+# [workspace.dependencies]
+# # Shared dependencies that members can use
+# libc = "0.2"
+# serde = { version = "1.0", features = ["derive"] }
+# thiserror = "1.0"
