@@ -14,9 +14,14 @@ TODO: insert screenshot
 
 **Using `nix` (Recommended):**
 
-[Install nix](https://nix.dev/install-nix.html), the package manager, on your system. You don't have to install Rust at all with this method. Entering the dev shell might take some time the very first time.
+[Install nix](https://nix.dev/install-nix.html), the package manager, on your system. You don't have to install Rust at all with this method. Entering the dev shell might take a little the very first time.
 ```bash
-nix-build tui.nix
+# without flakes
+nix-build 
+./result/bin/<package-name>
+
+# with flakes
+nix run 
 ```
 
 **Using `cargo`:**
