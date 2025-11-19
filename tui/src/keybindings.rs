@@ -13,10 +13,8 @@ pub enum Action {
     StartRecording,
     StopRecording,
     StartPlayback,
-    StopPlayback,
     TogglePlayback,
     ClearLoop,
-    // Add more actions as needed
 }
 
 pub struct Keybindings {
@@ -96,10 +94,6 @@ impl Keybindings {
             .iter()
             .find(|binding| binding.key == key)
             .map(|binding| &binding.action)
-    }
-
-    pub fn _get_all_bindings(&self) -> &[KeyAction] {
-        &self.bindings
     }
 
     pub fn get_bindings_for_display(&self) -> Vec<&KeyAction> {
