@@ -18,7 +18,7 @@ TODO: insert screenshot
 ```bash
 # without flakes
 nix-build 
-./result/bin/<package-name>
+./result/bin/uncycle-tui
 
 # with flakes
 nix run 
