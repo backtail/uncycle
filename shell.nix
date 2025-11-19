@@ -1,49 +1,26 @@
+{
+  system ? builtins.currentSystem,
+}:
+
 let
-  rustOverlay = import (fetchTarball "https://github.com/oxalica/rust-overlay/archive/master.tar.gz");
-  nixpkgs = fetchTarball "https://github.com/NixOS/nixpkgs/archive/refs/tags/25.05.tar.gz";
-
-  pkgs = import nixpkgs {
-    system = builtins.currentSystem;
-    overlays = [ rustOverlay ];
-  };
-
-  rustVersion = "1.88.0";
-  rustToolchain = pkgs.rust-bin.stable.${rustVersion}.default.override {
-    extensions = [ "rust-src" ];
-  };
-
-  platformDeps =
-    with pkgs;
-    if stdenv.isDarwin then
-      [
-        darwin.apple_sdk.frameworks.CoreFoundation
-        darwin.apple_sdk.frameworks.CoreAudio
-        darwin.apple_sdk.frameworks.AudioToolbox
-      ]
-    else
-      [
-        alsa-lib
-        pkg-config
-      ];
-
+  dev = import ./dependencies.nix { inherit system; };
 in
 
-pkgs.mkShell {
-  name = "uncycle-dev";
+dev.pkgs.mkShell {
 
   buildInputs =
-    with pkgs;
+    with dev.pkgs;
     [
-      rustToolchain
-      clang
+      dev.rustToolchain
     ]
-    ++ platformDeps;
+    ++ dev.devTools
+    ++ dev.platformDeps;
 
   shellHook = ''
     export TMPDIR="/tmp/nix-shell-$$"
     mkdir -p "$TMPDIR"
 
-    echo "Platform: ${pkgs.stdenv.system}"
+    echo "Platform: ${dev.pkgs.stdenv.system}"
     echo "Rust: $(rustc --version)"
     echo "Cargo: $(cargo --version)"
     echo ""
