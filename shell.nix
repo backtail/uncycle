@@ -3,7 +3,7 @@ let
   nixpkgs = fetchTarball "https://github.com/NixOS/nixpkgs/archive/refs/tags/25.05.tar.gz";
   pkgs = import nixpkgs { overlays = [ rustOverlay ]; };
 
-  rustVersion = "1.80.0";
+  rustVersion = "1.88.0";
   rustToolchain = pkgs.rust-bin.stable.${rustVersion}.default.override {
     extensions = [ "rust-src" ];
   };
@@ -15,12 +15,24 @@ pkgs.mkShell {
 
   buildInputs = with pkgs; [
     rustToolchain
+    rust-analyzer
 
     pkg-config
     alsa-lib
+
+    stdenv.cc.libc
+    stdenv.cc
   ];
 
   shellHook = ''
+    export TMPDIR="/tmp/nix-shell-$$"
+    mkdir -p "$TMPDIR"
+
+    export RUST_ANALYZER="${pkgs.rust-analyzer}/bin/rust-analyzer"
+
+    export LD_LIBRARY_PATH="${pkgs.stdenv.cc.libc}/lib:${pkgs.alsa-lib}/lib:$LD_LIBRARY_PATH"
+    export PKG_CONFIG_PATH="${pkgs.alsa-lib}/lib/pkgconfig:$PKG_CONFIG_PATH"
+
     echo "Rust: $(rustc --version)"
     echo "Cargo: $(cargo --version)"
     echo ""
