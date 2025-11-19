@@ -1,11 +1,8 @@
-use std::time::{Duration, Instant};
-
 // MIDI note representation
 #[derive(Clone)]
 pub struct MidiNote {
     pub note: u8,
     pub velocity: u8,
-    pub timestamp: Instant,
     pub active: bool,
 }
 
@@ -14,7 +11,6 @@ impl MidiNote {
         Self {
             note,
             velocity,
-            timestamp: Instant::now(),
             active: true,
         }
     }
@@ -44,20 +40,6 @@ impl MidiState {
         self.active_notes.push(midi_note.clone());
         self.last_note = Some(midi_note);
         self.note_count += 1;
-
-        let note_name = Self::get_note_name(note);
-        self.message_log
-            .push(format!("♪ {} ({}) vel:{}", note_name, note, velocity));
-
-        // Keep only last 50 messages
-        if self.message_log.len() > 50 {
-            self.message_log.remove(0);
-        }
-
-        // Clean up old notes
-        let now = Instant::now();
-        self.active_notes
-            .retain(|n| now.duration_since(n.timestamp) < Duration::from_secs(2));
     }
 
     pub fn remove_note(&mut self, note: u8) {
@@ -83,13 +65,11 @@ impl MidiState {
         }
 
         if let Some(last_note) = &self.last_note {
-            if last_note.timestamp.elapsed() < Duration::from_secs(1) {
-                let note_name = Self::get_note_name(last_note.note);
-                return format!(
-                    "♪ {} ({}) vel:{}",
-                    note_name, last_note.note, last_note.velocity
-                );
-            }
+            let note_name = Self::get_note_name(last_note.note);
+            return format!(
+                "♪ {} ({}) vel:{}",
+                note_name, last_note.note, last_note.velocity
+            );
         }
 
         let active_count = self.active_notes.iter().filter(|n| n.active).count();

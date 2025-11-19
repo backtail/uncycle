@@ -77,24 +77,33 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, redraw_tx: mpsc::Sender<
                         // Note On
                         if data2 > 0 {
                             state.add_note(data1, data2);
+                            state.add_message(format!("NOTE ON:  {:02} {:02}", data1, data2));
                         } else {
                             state.remove_note(data1);
+                            state.add_message(format!("NOTE OFF: {:02}", data1));
                         }
-                        let _ = redraw_tx_clone.send(());
                     }
+
                     0x80 => {
                         // Note Off
                         state.remove_note(data1);
-                        let _ = redraw_tx_clone.send(());
+                        state.add_message(format!("NOTE OFF: {:02}", data1));
                     }
+
+                    0xB0 => {
+                        // Control Change
+                        state.add_message(format!("CC:       {:02} {:02}", data1, data2));
+                    }
+
                     _ => {
                         state.add_message(format!(
                             "MIDI: {:02X} {:02X} {:02X}",
                             status, data1, data2
                         ));
-                        let _ = redraw_tx_clone.send(());
                     }
                 }
+
+                let _ = redraw_tx_clone.send(());
             }
         },
         (),
