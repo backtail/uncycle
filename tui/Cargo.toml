@@ -2,6 +2,10 @@
 name = "uncycle-tui"
 version = "0.1.0"
 edition = "2021"
+description = "A real-time MIDI tool that extends existing hardware synth capabilities."
+authors = ["backtail <mail@maxgenson.de>"]
+readme = "../README.md"
+repository = "https://github.com/backtail/uncycle"
 
 [dependencies]
 crossterm = "0.29"
