@@ -27,10 +27,11 @@ use tabs::*;
 
 #[derive(PartialEq)]
 enum AppTab {
-    Main,
-    Midi,
-    Settings,
-    Help,
+    Main = 1,
+    Device = 2,
+    Midi = 3,
+    Settings = 4,
+    Help = 5,
 }
 
 pub struct App {
@@ -73,9 +74,10 @@ impl App {
             // Handle tab switching
             match key {
                 KeyCode::Char('1') => self.current_tab = AppTab::Main,
-                KeyCode::Char('2') => self.current_tab = AppTab::Midi,
-                KeyCode::Char('3') => self.current_tab = AppTab::Settings,
-                KeyCode::Char('4') => self.current_tab = AppTab::Help,
+                KeyCode::Char('2') => self.current_tab = AppTab::Device,
+                KeyCode::Char('3') => self.current_tab = AppTab::Midi,
+                KeyCode::Char('4') => self.current_tab = AppTab::Settings,
+                KeyCode::Char('5') => self.current_tab = AppTab::Help,
                 _ => {}
             }
         }
@@ -118,7 +120,7 @@ pub fn run_app<B: Backend>(
 fn ui(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .margin(1)
+        .margin(0)
         .constraints([
             Constraint::Length(3), // Header
             Constraint::Length(3), // Tabs
@@ -137,16 +139,18 @@ fn ui(f: &mut Frame, app: &App) {
     // Tabs
     let tabs = Tabs::new(vec![
         "[1] Main",
-        "[2] MIDI Monitor",
-        "[3] Settings",
-        "[4] Help",
+        "[2] Device",
+        "[3] MIDI Monitor",
+        "[4] Settings",
+        "[5] Help",
     ])
     .block(Block::default().borders(Borders::ALL))
     .select(match app.current_tab {
         AppTab::Main => 0,
-        AppTab::Midi => 1,
-        AppTab::Settings => 2,
-        AppTab::Help => 3,
+        AppTab::Device => 1,
+        AppTab::Midi => 2,
+        AppTab::Settings => 3,
+        AppTab::Help => 4,
     })
     .style(Style::default().fg(Color::White))
     .highlight_style(
@@ -159,6 +163,7 @@ fn ui(f: &mut Frame, app: &App) {
     // Main content based on current tab
     match app.current_tab {
         AppTab::Main => render_main_tab(f, app, chunks[2]),
+        AppTab::Device => render_device_tab(f, app, chunks[2]),
         AppTab::Midi => render_midi_tab(f, app, chunks[2]),
         AppTab::Settings => render_settings_tab(f, app, chunks[2]),
         AppTab::Help => render_help_tab(f, app, chunks[2]),
