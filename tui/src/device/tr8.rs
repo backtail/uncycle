@@ -1,11 +1,15 @@
-use std::str::FromStr;
+use std::{
+    f64::consts::{FRAC_PI_3, PI},
+    str::FromStr,
+};
 
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     prelude::Stylize,
     style::{Color, Style},
     symbols::{self},
     widgets::{
+        block::Position,
         canvas::{self, Canvas},
         Block, Widget,
     },
@@ -14,12 +18,12 @@ use ratatui::{
 
 use crate::app::App;
 
+/// (number: u8, name: &'static str)
+type RichMidiCC = (u8, &'static str);
+
 const TR_8_INTRUMENTS: usize = 11;
 const TR_8_STEPS: usize = TR_8_INTRUMENTS + 5;
-
-const TR_8_STEP_NAME: [&'static str; TR_8_STEPS] = [
-    "BD", "SD", "LT", "MT", "HT", "RS", "HC", "CH", "OH", "CC", "RC", "", "", "", "", "",
-];
+const TR_8_PARAM_ELEMS: usize = TR_8_INTRUMENTS + 2;
 
 // relevant notes to check
 
@@ -64,31 +68,22 @@ const TR_8_NOTES: [u8; TR_8_STEPS] = [
 
 // relevant CC numbers to check
 
-const TR_8_BD_CC_VOL: u8 = 24;
-const TR_8_SD_CC_VOL: u8 = 29;
-const TR_8_LT_CC_VOL: u8 = 48;
-const TR_8_MT_CC_VOL: u8 = 51;
-const TR_8_HT_CC_VOL: u8 = 54;
-const TR_8_RS_CC_VOL: u8 = 57;
-const TR_8_HC_CC_VOL: u8 = 60;
-const TR_8_CH_CC_VOL: u8 = 63;
-const TR_8_OH_CC_VOL: u8 = 82;
-const TR_8_CC_CC_VOL: u8 = 85;
-const TR_8_RC_CC_VOL: u8 = 88;
-
-const TR_8_CC_VOL: [u8; TR_8_INTRUMENTS] = [
-    TR_8_BD_CC_VOL,
-    TR_8_SD_CC_VOL,
-    TR_8_LT_CC_VOL,
-    TR_8_MT_CC_VOL,
-    TR_8_HT_CC_VOL,
-    TR_8_RS_CC_VOL,
-    TR_8_HC_CC_VOL,
-    TR_8_CH_CC_VOL,
-    TR_8_OH_CC_VOL,
-    TR_8_CC_CC_VOL,
-    TR_8_RC_CC_VOL,
+const TR_8_CC_FADER: [RichMidiCC; TR_8_INTRUMENTS] = [
+    (24, "BD"),
+    (29, "SD"),
+    (48, "LT"),
+    (51, "MT"),
+    (54, "HT"),
+    (57, "RS"),
+    (60, "HC"),
+    (63, "CH"),
+    (82, "OH"),
+    (85, "CC"),
+    (88, "RC"),
 ];
+
+const KNOB_TURN_RADIANS: f64 = -5.0 * FRAC_PI_3;
+const KNOB_TURN_OFFSET: f64 = PI + FRAC_PI_3;
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
     // MIDI data extraction
@@ -105,7 +100,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         }
 
         for i in 0..TR_8_INTRUMENTS {
-            current_volume[i] = midi_state.get_cc_val_of(TR_8_CC_VOL[i]);
+            current_volume[i] = midi_state.get_cc_val_of(TR_8_CC_FADER[i].0);
         }
     }
 
@@ -116,7 +111,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             // volume
-            Constraint::Length(10),
+            Constraint::Length(20),
             // placeholder
             Constraint::Length(1),
             // scale lines
@@ -129,8 +124,15 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             // placeholder
             Constraint::Fill(1),
         ])
+        .margin(6)
         .split(area);
 
+    f.render_widget(
+        Block::bordered()
+            .green()
+            .border_set(symbols::border::QUADRANT_OUTSIDE),
+        area.inner(Margin::new(2, 2)),
+    );
     render_instruments(f, vert[0], &current_volume);
     render_lines::<6>(f, vert[2]);
     render_lines::<3>(f, vert[3]);
@@ -143,27 +145,55 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 ///////////////////////
 
 fn render_instruments(f: &mut Frame, area: Rect, volume: &[u8; TR_8_INTRUMENTS]) {
-    let constr_ratio = TR_8_INTRUMENTS as u32 + 2;
-    let steps = Layout::default()
-        .direction(Direction::Horizontal)
+    // Split horizonzally
+    let vert = Layout::default()
+        .direction(Direction::Vertical)
         .constraints([
-            Constraint::Ratio(2, constr_ratio), // BD has more area
-            Constraint::Ratio(2, constr_ratio), // SD has more area
-            Constraint::Ratio(1, constr_ratio),
-            Constraint::Ratio(1, constr_ratio),
-            Constraint::Ratio(1, constr_ratio),
-            Constraint::Ratio(1, constr_ratio),
-            Constraint::Ratio(1, constr_ratio),
-            Constraint::Ratio(1, constr_ratio),
-            Constraint::Ratio(1, constr_ratio),
-            Constraint::Ratio(1, constr_ratio),
-            Constraint::Ratio(1, constr_ratio),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(50),
         ])
         .split(area);
 
+    let first_row_knobs = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32); TR_8_PARAM_ELEMS])
+        .split(vert[0]);
+
+    let second_row_knobs = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32); TR_8_PARAM_ELEMS])
+        .split(vert[1]);
+
+    let steps = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Ratio(2, TR_8_PARAM_ELEMS as u32), // BD has more area
+            Constraint::Ratio(2, TR_8_PARAM_ELEMS as u32), // SD has more area
+            Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32),
+            Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32),
+            Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32),
+            Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32),
+            Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32),
+            Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32),
+            Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32),
+            Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32),
+            Constraint::Ratio(1, TR_8_PARAM_ELEMS as u32),
+        ])
+        .split(vert[2]);
+
+    for i in 0..first_row_knobs.len() {
+        let wrap = i as f64 / first_row_knobs.len() as f64;
+        f.render_widget(knob(wrap), first_row_knobs[i]);
+    }
+
+    for i in 0..second_row_knobs.len() {
+        f.render_widget(knob(0.0), second_row_knobs[i]);
+    }
+
     for i in 0..steps.len() {
         let pos = volume[i] as f64 / 127.0_f64;
-        f.render_widget(fader(pos), steps[i]);
+        f.render_widget(fader(TR_8_CC_FADER[i].1, pos), steps[i]);
     }
 }
 
@@ -190,25 +220,59 @@ fn render_steps(f: &mut Frame, area: Rect, is_active: &[bool; TR_8_STEPS]) {
         .split(area);
 
     for i in 0..TR_8_STEPS {
-        f.render_widget(tr8_step(TR_8_STEP_NAME[i], i, is_active[i]), steps[i]);
+        f.render_widget(tr8_step(i, is_active[i]), steps[i]);
     }
 }
 
 // Helper functions
 ///////////////////
 
-fn fader(pos: f64) -> impl Widget {
+fn knob(pos: f64) -> impl Widget {
     Canvas::default()
+        .block(
+            Block::new()
+                .title("TEST")
+                .title_alignment(Alignment::Center)
+                .title_position(Position::Bottom),
+        )
+        .paint(move |ctx| {
+            ctx.draw(&canvas::Circle {
+                x: 0.0,
+                y: 0.0,
+                radius: 1.0,
+                color: Color::White,
+            });
+            ctx.draw(&canvas::Line::new(
+                0.0,
+                0.0,
+                (pos * KNOB_TURN_RADIANS + KNOB_TURN_OFFSET).cos(),
+                (pos * KNOB_TURN_RADIANS + KNOB_TURN_OFFSET).sin(),
+                Color::White,
+            ));
+        })
+        .marker(symbols::Marker::Braille)
+        .x_bounds([-2.0, 2.0])
+        .y_bounds([-2.0, 2.0])
+}
+
+fn fader<'a>(title: &'a str, pos: f64) -> impl Widget + 'a {
+    Canvas::default()
+        .block(
+            Block::new()
+                .title(title)
+                .title_alignment(Alignment::Center)
+                .title_position(Position::Bottom),
+        )
         .paint(move |ctx| {
             ctx.draw(&canvas::Line::new(0.0, 0.0, 0.0, 1.0, Color::Green));
             ctx.draw(&canvas::Line::new(-0.5, pos, 0.5, pos, Color::White));
         })
-        .marker(symbols::Marker::Bar)
+        .marker(symbols::Marker::Braille)
         .x_bounds([-1.0, 1.0])
-        .y_bounds([0.0, 1.0])
+        .y_bounds([-0.1, 1.1])
 }
 
-fn tr8_step<'a>(title: &'a str, step: usize, is_active: bool) -> impl Widget + 'a {
+fn tr8_step(step: usize, is_active: bool) -> impl Widget {
     let c;
     match step as u16 {
         0..=3 => c = Color::Red,
@@ -218,7 +282,6 @@ fn tr8_step<'a>(title: &'a str, step: usize, is_active: bool) -> impl Widget + '
     }
 
     let b = Block::bordered()
-        .title_bottom(title)
         .title_alignment(Alignment::Center)
         .border_set(symbols::border::QUADRANT_OUTSIDE)
         .border_style(Style::reset().fg(c).reversed())
