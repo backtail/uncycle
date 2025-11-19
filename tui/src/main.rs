@@ -176,23 +176,14 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
         return;
     }
 
-    // // eprintln!("Available MIDI ports:");
-    // for (i, port) in in_ports.iter().enumerate() {
-        // eprintln!("{}: {}", i, input.port_name(port).unwrap_or_else(|_| "Unknown".to_string()));
-    // }
+    let mut in_port = &in_ports[0];
 
-    // Use the first available port
-    let in_port = &in_ports[0];
-    let port_name = match input.port_name(in_port) {
-        Ok(name) => name,
-        Err(e) => {
-            let mut state = midi_state.lock().unwrap();
-            state.set_error(format!("Failed to get port name: {}", e));
-            return;
+    for (i, port) in in_ports.iter().enumerate() {
+        if input.port_name(port).unwrap().contains("TR-8") {
+            in_port = &in_ports[i];
+            continue;
         }
-    };
-    
-    // eprintln!("Using MIDI port: {}", port_name);
+    }
 
     // Connect without using ? operator - handle the Result manually
     let conn_result = input.connect(
