@@ -5,6 +5,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+const MIDI_CLOCK: u8 = 0xF8;
+const MIDI_START: u8 = 0xFA;
+const MIDI_STOP: u8 = 0xFC;
+
 // MIDI note representation
 #[derive(Clone)]
 pub struct MidiNote {
@@ -38,15 +42,14 @@ pub struct MidiState {
     pub error: Option<String>,
     pub note_count: u32,
 
-    // logging incoming data for convenience
+    // logging data for convenience
     pub in_note_log: Vec<String>,
     pub in_cc_log: Vec<String>,
     pub in_other_log: Vec<String>,
 
-    pub output_connection: Option<MidiOutputConnection>,
-    pub _input_connected: bool,
-    pub _output_connected: bool,
-    pub _clock_running: bool,
+    pub clock_running: bool,
+    pub start_flag: bool,
+    pub stop_flag: bool,
     pub clock_bpm: f64,
     pub last_clock_time: Option<Instant>,
     pub clock_pulse_count: u32,
@@ -64,10 +67,9 @@ impl MidiState {
             in_cc_log: Vec::new(),
             in_other_log: Vec::new(),
 
-            output_connection: None,
-            _input_connected: false,
-            _output_connected: false,
-            _clock_running: false,
+            clock_running: false,
+            start_flag: false,
+            stop_flag: false,
             clock_bpm: 120.0,
             last_clock_time: None,
             clock_pulse_count: 0,
@@ -145,8 +147,17 @@ impl MidiState {
             self.clock_bpm = 40.0;
         }
     }
+
+    pub fn start_stop_sequence(&mut self) {
+        if self.clock_running {
+            self.stop_flag = true;
+        } else {
+            self.start_flag = true;
+        }
+    }
 }
 
+// is executed in dedicated thread
 pub fn midi_rx_callback(midi_state: &Arc<Mutex<MidiState>>, message: &[u8]) -> Result<()> {
     if message.len() >= 3 {
         let status = message[0];
@@ -188,23 +199,44 @@ pub fn midi_rx_callback(midi_state: &Arc<Mutex<MidiState>>, message: &[u8]) -> R
     Ok(())
 }
 
-pub fn midi_tx_callback(midi_state: &Arc<Mutex<MidiState>>) -> Result<()> {
+// is executed in dedicated thread
+pub fn midi_tx_callback(
+    midi_state: &Arc<Mutex<MidiState>>,
+    conn: &mut MidiOutputConnection,
+) -> Result<()> {
     let mut state = midi_state.lock().unwrap();
 
+    // MIDI Start
+    if state.start_flag {
+        state.start_flag = false;
+        state.clock_running = true;
+
+        conn.send(&[MIDI_START]).unwrap();
+        state.log_misc(format!("Send: 0x{:02X} (MIDI Start)", MIDI_START));
+    }
+
+    // MIDI Stop
+    if state.stop_flag {
+        state.stop_flag = false;
+        state.clock_running = false;
+
+        conn.send(&[MIDI_STOP]).unwrap();
+        state.log_misc(format!("Send: 0x{:02X} (MIDI Stop)", MIDI_STOP));
+    }
+
+    // MIDI Clock
     if let Some(last_time) = state.last_clock_time {
         let interval = Duration::from_micros((60_000_000.0 / (state.clock_bpm * 24.0)) as u64);
 
         if last_time.elapsed() >= interval {
-            if let Some(ref mut conn) = state.output_connection {
-                const MIDI_CLOCK: &[u8] = &[0xF8];
-                conn.send(MIDI_CLOCK)
-                    .map_err(|e| anyhow::anyhow!("Failed to send MIDI Clock: {}", e))?;
-                state.last_clock_time = Some(Instant::now());
-                state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
-            }
+            conn.send(&[MIDI_CLOCK]).unwrap();
+
+            state.last_clock_time = Some(Instant::now());
+            state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
         }
     } else {
         state.last_clock_time = Some(Instant::now());
     }
+
     Ok(())
 }

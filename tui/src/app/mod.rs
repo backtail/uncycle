@@ -65,6 +65,10 @@ impl App {
                 }
                 Action::CycleTabs => self.cycle_tabs(),
                 Action::RevCycleTabs => self.rev_cycle_tabs(),
+                Action::ToggleSequence => {
+                    let mut state = self.midi_state.lock().unwrap();
+                    state.start_stop_sequence();
+                }
             }
         } else {
             // Handle tab switching

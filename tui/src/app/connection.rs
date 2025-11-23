@@ -130,12 +130,6 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
             {
                 let mut state = midi_state.lock().unwrap();
                 state.log_misc(format!("Connected to MIDI out port: {}", port_name));
-
-                // auto-start for ease of debug
-                const MIDI_START: &[u8] = &[0xFA];
-                conn.send(MIDI_START).unwrap();
-
-                state.output_connection = Some(conn);
             }
 
             loop {
@@ -143,7 +137,7 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
                 thread::sleep(Duration::from_millis(1));
 
                 // callback function is being called inside loop via polling
-                midi_tx_callback(&midi_state).unwrap();
+                midi_tx_callback(&midi_state, &mut conn).unwrap();
             }
         }
 

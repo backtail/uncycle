@@ -14,6 +14,7 @@ pub enum Action {
     DecreaseBPM,
     CycleTabs,
     RevCycleTabs,
+    ToggleSequence,
 }
 
 pub struct Keybindings {
@@ -57,6 +58,11 @@ impl Keybindings {
                 key: KeyCode::BackTab,
                 description: "Reverse Cycle Tabs",
                 action: Action::RevCycleTabs,
+            },
+            KeyAction {
+                key: KeyCode::Char(' '),
+                description: "Start/Stop Sequence",
+                action: Action::ToggleSequence,
             },
         ];
 
