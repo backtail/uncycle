@@ -72,6 +72,7 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
         Ok(_conn) => {
             {
                 let mut state = midi_state.lock().unwrap();
+                state.port_in_name = Some(port_name.clone());
                 state.log_misc(format!("Connected to MIDI in port: {}", port_name));
             }
 
@@ -84,6 +85,7 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
 
                         if state.kill_rx_conn {
                             state.kill_rx_conn = false;
+                            state.port_in_name = None;
                             state.log_misc(format!("MIDI RX connection killed"));
                             break;
                         }
@@ -141,6 +143,7 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
         Ok(mut conn) => {
             {
                 let mut state = midi_state.lock().unwrap();
+                state.port_out_name = Some(port_name.clone());
                 state.log_misc(format!("Connected to MIDI out port: {}", port_name));
             }
 
@@ -152,6 +155,7 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
                 if let Err(e) = midi_tx_callback(&midi_state, &mut conn) {
                     {
                         let mut state = midi_state.lock().unwrap();
+                        state.port_out_name = None;
                         state.log_misc(format!("{}", e));
                     }
                     break;

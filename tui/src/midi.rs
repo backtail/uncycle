@@ -47,6 +47,9 @@ pub struct MidiState {
     pub in_cc_log: Vec<String>,
     pub in_other_log: Vec<String>,
 
+    pub port_in_name: Option<String>,
+    pub port_out_name: Option<String>,
+
     pub clock_running: bool,
     pub start_flag: bool,
     pub stop_flag: bool,
@@ -66,9 +69,13 @@ impl MidiState {
             last_note: None,
             error: None,
             note_count: 0,
+
             in_note_log: Vec::new(),
             in_cc_log: Vec::new(),
             in_other_log: Vec::new(),
+
+            port_in_name: None,
+            port_out_name: None,
 
             clock_running: false,
             start_flag: false,
