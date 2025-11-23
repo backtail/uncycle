@@ -168,6 +168,14 @@ impl MidiState {
             self.start_flag = true;
         }
     }
+
+    pub fn get_step_number(&mut self) -> u8 {
+        if self.clock_running {
+            ((self.clock_pulse_count / 6) % 16) as u8
+        } else {
+            0
+        }
+    }
 }
 
 // is executed in dedicated thread
@@ -225,6 +233,7 @@ pub fn midi_tx_callback(
         state.clock_running = true;
 
         conn.send(&[MIDI_START]).unwrap();
+        state.clock_pulse_count = 0;
         state.log_misc(format!("Send: 0x{:02X} (MIDI Start)", MIDI_START));
     }
 
