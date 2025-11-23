@@ -15,6 +15,7 @@ pub enum Action {
     CycleTabs,
     RevCycleTabs,
     ToggleSequence,
+    KillConnection,
 }
 
 pub struct Keybindings {
@@ -31,11 +32,6 @@ impl Keybindings {
             },
             KeyAction {
                 key: KeyCode::Char('Q'),
-                description: "Quit application",
-                action: Action::Quit,
-            },
-            KeyAction {
-                key: KeyCode::Esc,
                 description: "Quit application",
                 action: Action::Quit,
             },
@@ -63,6 +59,11 @@ impl Keybindings {
                 key: KeyCode::Char(' '),
                 description: "Start/Stop Sequence",
                 action: Action::ToggleSequence,
+            },
+            KeyAction {
+                key: KeyCode::Esc,
+                description: "Kill MIDI connection",
+                action: Action::KillConnection,
             },
         ];
 

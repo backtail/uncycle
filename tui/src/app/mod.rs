@@ -69,6 +69,11 @@ impl App {
                     let mut state = self.midi_state.lock().unwrap();
                     state.start_stop_sequence();
                 }
+                Action::KillConnection => {
+                    let mut state = self.midi_state.lock().unwrap();
+                    state.kill_rx_conn = true;
+                    state.kill_tx_conn = true;
+                }
             }
         } else {
             // Handle tab switching

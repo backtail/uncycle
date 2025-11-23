@@ -75,11 +75,23 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
                 state.log_misc(format!("Connected to MIDI in port: {}", port_name));
             }
 
-            // Keep thread alive
+            // Keep thread alive until user kills or switches it
             loop {
-                thread::sleep(Duration::from_secs(1));
+                thread::sleep(Duration::from_millis(16));
+                {
+                    {
+                        let mut state = midi_state.lock().unwrap();
+
+                        if state.kill_rx_conn {
+                            state.kill_rx_conn = false;
+                            state.log_misc(format!("MIDI RX connection killed"));
+                            break;
+                        }
+                    }
+                }
             }
         }
+
         Err(e) => {
             let mut state = midi_state.lock().unwrap();
             state.set_error(format!("Failed to connect to MIDI port: {}", e));
@@ -136,8 +148,14 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
                 // poll @ 1kHz
                 thread::sleep(Duration::from_millis(1));
 
-                // callback function is being called inside loop via polling
-                midi_tx_callback(&midi_state, &mut conn).unwrap();
+                // callback function is being called inside loop via polling until user kills or switches port
+                if let Err(e) = midi_tx_callback(&midi_state, &mut conn) {
+                    {
+                        let mut state = midi_state.lock().unwrap();
+                        state.log_misc(format!("{}", e));
+                    }
+                    break;
+                }
             }
         }
 

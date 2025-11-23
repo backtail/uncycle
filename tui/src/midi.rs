@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Error, Result};
 use midir::MidiOutputConnection;
 use std::{
     sync::{Arc, Mutex},
@@ -53,6 +53,9 @@ pub struct MidiState {
     pub clock_bpm: f64,
     pub last_clock_time: Option<Instant>,
     pub clock_pulse_count: u32,
+
+    pub kill_rx_conn: bool,
+    pub kill_tx_conn: bool,
 }
 
 impl MidiState {
@@ -73,6 +76,9 @@ impl MidiState {
             clock_bpm: 120.0,
             last_clock_time: None,
             clock_pulse_count: 0,
+
+            kill_rx_conn: false,
+            kill_tx_conn: false,
         }
     }
 
@@ -238,5 +244,10 @@ pub fn midi_tx_callback(
         state.last_clock_time = Some(Instant::now());
     }
 
-    Ok(())
+    if !state.kill_tx_conn {
+        state.kill_tx_conn = false;
+        Ok(())
+    } else {
+        Err(Error::msg("MIDI TX connection killed"))
+    }
 }
