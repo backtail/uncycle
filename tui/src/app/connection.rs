@@ -1,20 +1,16 @@
-use crate::midi;
-
 use std::{
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Mutex},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
-use anyhow::Result;
+use crate::midi::{midi_rx_callback, midi_tx_callback, MidiState};
 
-use midi::MidiState;
-
-pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>, redraw_tx: mpsc::Sender<()>) {
+pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>) {
     let midi_state_output = Arc::clone(&midi_state);
 
     thread::spawn(move || {
-        midi_input_thread(midi_state, redraw_tx);
+        midi_input_thread(midi_state);
     });
 
     thread::spawn(move || {
@@ -22,7 +18,7 @@ pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>, redraw_tx: mpsc::Sen
     });
 }
 
-fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, redraw_tx: mpsc::Sender<()>) {
+fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
     let input = match midir::MidiInput::new("uncycle_midi_input") {
         Ok(input) => input,
         Err(e) => {
@@ -60,66 +56,25 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, redraw_tx: mpsc::Sender<
         }
     };
 
-    {
-        let mut state = midi_state.lock().unwrap();
-        state.add_message(format!("Connected to MIDI in port: {}", port_name));
-    }
-
     let midi_state_clone = Arc::clone(&midi_state);
-    let redraw_tx_clone = redraw_tx.clone();
 
+    // callback function is defined before entering loop
     let conn_result = input.connect(
         in_port,
         "uncycle-midi-in",
         move |_timestamp, message, _| {
-            if message.len() >= 3 {
-                let status = message[0];
-                let data1 = message[1];
-                let data2 = message[2];
-
-                let message_type = status & 0xF0;
-                let mut state = midi_state_clone.lock().unwrap();
-
-                match message_type {
-                    0x90 => {
-                        // Note On
-                        if data2 > 0 {
-                            state.add_note(data1, data2);
-                            state.add_message(format!("NOTE ON:  {:02} {:02}", data1, data2));
-                        } else {
-                            state.remove_note(data1);
-                            state.add_message(format!("NOTE OFF: {:02}", data1));
-                        }
-                    }
-
-                    0x80 => {
-                        // Note Off
-                        state.remove_note(data1);
-                        state.add_message(format!("NOTE OFF: {:02}", data1));
-                    }
-
-                    0xB0 => {
-                        // Control Change
-                        state.update_cc(data1, data2);
-                        state.add_message(format!("CC:       {:02} {:02}", data1, data2));
-                    }
-
-                    _ => {
-                        state.add_message(format!(
-                            "MIDI: {:02X} {:02X} {:02X}",
-                            status, data1, data2
-                        ));
-                    }
-                }
-
-                let _ = redraw_tx_clone.send(());
-            }
+            midi_rx_callback(&midi_state_clone, message).unwrap();
         },
         (),
     );
 
     match conn_result {
         Ok(_conn) => {
+            {
+                let mut state = midi_state.lock().unwrap();
+                state.log_misc(format!("Connected to MIDI in port: {}", port_name));
+            }
+
             // Keep thread alive
             loop {
                 thread::sleep(Duration::from_secs(1));
@@ -171,15 +126,24 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
     let conn_result = output.connect(out_port, "uncycle-midi-in");
 
     match conn_result {
-        Ok(mut _conn) => {
-            // Keep thread alive
+        Ok(mut conn) => {
             {
                 let mut state = midi_state.lock().unwrap();
-                state.add_message(format!("Connected to MIDI out port: {}", port_name));
-                state.output_connection = Some(_conn);
+                state.log_misc(format!("Connected to MIDI out port: {}", port_name));
+
+                // auto-start for ease of debug
+                const MIDI_START: &[u8] = &[0xFA];
+                conn.send(MIDI_START).unwrap();
+
+                state.output_connection = Some(conn);
             }
+
             loop {
-                thread::sleep(Duration::from_secs(1));
+                // poll @ 1kHz
+                thread::sleep(Duration::from_millis(1));
+
+                // callback function is being called inside loop via polling
+                midi_tx_callback(&midi_state).unwrap();
             }
         }
 
@@ -188,27 +152,4 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
             state.set_error(format!("Failed to connect to MIDI port: {}", e));
         }
     }
-}
-
-pub fn update_midi_clock(midi_state: &Arc<Mutex<MidiState>>) -> Result<()> {
-    let mut state = midi_state.lock().unwrap();
-
-    // if state.clock_running {
-    if let Some(last_time) = state.last_clock_time {
-        let interval = Duration::from_micros((60_000_000.0 / (state.clock_bpm * 24.0)) as u64);
-
-        if last_time.elapsed() >= interval {
-            if let Some(ref mut conn) = state.output_connection {
-                const MIDI_CLOCK: &[u8] = &[0xF8];
-                conn.send(MIDI_CLOCK)
-                    .map_err(|e| anyhow::anyhow!("Failed to send MIDI Clock: {}", e))?;
-                state.last_clock_time = Some(Instant::now());
-                state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
-            }
-        }
-    } else {
-        state.last_clock_time = Some(Instant::now());
-    }
-    // }
-    Ok(())
 }

@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::Line,
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem},
     Frame,
 };
 
@@ -12,42 +12,55 @@ use app::App;
 
 pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(6), // Current status
-            Constraint::Min(5),    // Message log
-        ])
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(1, 2); 3])
         .split(area);
 
     let midi_state = app.midi_state.lock().unwrap();
 
-    // Current MIDI status
-    let status_text = vec![
-        Line::from(format!("Last note: {}", midi_state.get_note_display())),
-        Line::from(format!("Total notes received: {}", midi_state.note_count)),
-    ];
-
-    let status_block = Block::default().title("MIDI Status").borders(Borders::ALL);
-    let status = Paragraph::new(status_text)
-        .block(status_block)
-        .wrap(Wrap { trim: true });
-    f.render_widget(status, chunks[0]);
-
     // Message log
-    let log_items: Vec<ListItem> = midi_state
-        .message_log
+    let incoming_notes: Vec<ListItem> = midi_state
+        .in_note_log
         .iter()
         .rev() // Show newest first
-        .take(50) // Limit to 50 items
+        .take(200) // Limit to 200 items
         .map(|msg| ListItem::new(Line::from(msg.as_str())))
         .collect();
 
-    let log_block = Block::default()
-        .title("MIDI Message Log")
-        .borders(Borders::ALL);
-    let log = List::new(log_items)
+    let incoming_cc: Vec<ListItem> = midi_state
+        .in_cc_log
+        .iter()
+        .rev() // Show newest first
+        .take(200) // Limit to 200 items
+        .map(|msg| ListItem::new(Line::from(msg.as_str())))
+        .collect();
+
+    let misc: Vec<ListItem> = midi_state
+        .in_other_log
+        .iter()
+        .rev() // Show newest first
+        .take(200) // Limit to 200 items
+        .map(|msg| ListItem::new(Line::from(msg.as_str())))
+        .collect();
+
+    let log_block = Block::default().title("Note Log").borders(Borders::ALL);
+    let log = List::new(incoming_notes)
+        .block(log_block)
+        .style(Style::default().fg(Color::White))
+        .highlight_style(Style::default().fg(Color::Yellow));
+    f.render_widget(log, chunks[0]);
+
+    let log_block = Block::default().title("CC Log").borders(Borders::ALL);
+    let log = List::new(incoming_cc)
         .block(log_block)
         .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().fg(Color::Yellow));
     f.render_widget(log, chunks[1]);
+
+    let log_block = Block::default().title("Misc").borders(Borders::ALL);
+    let log = List::new(misc)
+        .block(log_block)
+        .style(Style::default().fg(Color::White))
+        .highlight_style(Style::default().fg(Color::Yellow));
+    f.render_widget(log, chunks[2]);
 }

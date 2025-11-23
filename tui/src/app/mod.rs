@@ -1,7 +1,7 @@
 pub mod connection;
 pub mod tabs;
 
-use crate::{keybindings, midi, state};
+use crate::{app, keybindings, midi};
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -14,15 +14,14 @@ use ratatui::{
 };
 
 use std::{
-    sync::{mpsc, Arc, Mutex},
-    thread,
-    time::{Duration, Instant},
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 
-use keybindings::{Action, Keybindings};
-use state::UncycleState;
+use app::connection::setup_midi_socket;
 
-use connection::update_midi_clock;
+use keybindings::{Action, Keybindings};
+
 use midi::MidiState;
 use tabs::*;
 
@@ -36,7 +35,6 @@ enum AppTab {
 }
 
 pub struct App {
-    state: UncycleState,
     keybindings: Keybindings,
     pub midi_state: Arc<Mutex<MidiState>>,
     current_tab: AppTab,
@@ -44,15 +42,10 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(
-        state: UncycleState,
-        keybindings: Keybindings,
-        midi_state: Arc<Mutex<MidiState>>,
-    ) -> Self {
+    pub fn new() -> Self {
         Self {
-            state,
-            keybindings,
-            midi_state,
+            keybindings: Keybindings::new(),
+            midi_state: Arc::new(Mutex::new(MidiState::new())),
             current_tab: AppTab::Main,
             should_quit: false,
         }
@@ -62,14 +55,16 @@ impl App {
         if let Some(action) = self.keybindings.find_action(key) {
             match action {
                 Action::Quit => self.should_quit = true,
-                Action::StartRecording => self.state.start_recording(),
-                Action::StopRecording => {
-                    self.state.stop_recording();
-                    self.state.stop_playback();
+                Action::IncreaseBPM => {
+                    let mut state = self.midi_state.lock().unwrap();
+                    state.increase_bpm_by(1.0);
                 }
-                Action::StartPlayback => self.state.start_playback(),
-                Action::TogglePlayback => self.state.toggle_playback(),
-                Action::ClearLoop => self.state.loop_count = 0,
+                Action::DecreaseBPM => {
+                    let mut state = self.midi_state.lock().unwrap();
+                    state.decrease_bpm_by(1.0);
+                }
+                Action::CycleTabs => self.cycle_tabs(),
+                Action::RevCycleTabs => self.rev_cycle_tabs(),
             }
         } else {
             // Handle tab switching
@@ -83,46 +78,44 @@ impl App {
             }
         }
     }
+
+    fn cycle_tabs(&mut self) {
+        match self.current_tab {
+            AppTab::Main => self.current_tab = AppTab::Device,
+            AppTab::Device => self.current_tab = AppTab::Midi,
+            AppTab::Midi => self.current_tab = AppTab::Settings,
+            AppTab::Settings => self.current_tab = AppTab::Help,
+            AppTab::Help => self.current_tab = AppTab::Main,
+        }
+    }
+
+    fn rev_cycle_tabs(&mut self) {
+        match self.current_tab {
+            AppTab::Main => self.current_tab = AppTab::Help,
+            AppTab::Device => self.current_tab = AppTab::Main,
+            AppTab::Midi => self.current_tab = AppTab::Device,
+            AppTab::Settings => self.current_tab = AppTab::Midi,
+            AppTab::Help => self.current_tab = AppTab::Settings,
+        }
+    }
 }
 
-pub fn run_app<B: Backend>(
-    terminal: &mut Terminal<B>,
-    app: &mut App,
-    redraw_rx: mpsc::Receiver<()>,
-) -> Result<()> {
-    let mut last_clock_check = Instant::now();
-    let clock_check_interval = Duration::from_millis(1); // Check every 1ms for accuracy
+pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
+    setup_midi_socket(app.midi_state.clone());
 
     while !app.should_quit {
-        // Draw UI
         terminal.draw(|f| ui(f, app))?;
 
-        // Handle events with timeout to check for MIDI redraw signals
+        // Handle events with timeout to check for MIDI redraw signals (~60Hz)
         if crossterm::event::poll(Duration::from_millis(16))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     app.on_key(key.code);
                 }
             }
-        } else {
-            // Check for MIDI redraw signals
-            if redraw_rx.try_recv().is_ok() {
-                // Force redraw on next iteration
-                continue;
-            }
-        }
-
-        if last_clock_check.elapsed() >= clock_check_interval {
-            last_clock_check = Instant::now();
-            update_midi_clock(&app.midi_state)?;
-        }
-
-        // Simulate loop progression
-        if app.state.is_playing {
-            app.state.loop_count += 1;
-            thread::sleep(Duration::from_millis(100));
         }
     }
+
     Ok(())
 }
 
@@ -163,7 +156,7 @@ fn ui(f: &mut Frame, app: &App) {
 
     let main_area = chunks[1].inner(Margin {
         horizontal: 1,
-        vertical: 1,
+        vertical: 0,
     });
 
     // Main content based on current tab

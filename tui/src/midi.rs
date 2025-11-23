@@ -1,11 +1,15 @@
-use std::time::Instant;
+use anyhow::Result;
+use midir::MidiOutputConnection;
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 // MIDI note representation
 #[derive(Clone)]
 pub struct MidiNote {
     pub note: u8,
-    pub velocity: u8,
-    pub active: bool,
+    pub _velocity: u8,
 }
 
 // MIDI CC representation
@@ -16,12 +20,8 @@ pub struct MidiCC {
 }
 
 impl MidiNote {
-    fn new(note: u8, velocity: u8) -> Self {
-        Self {
-            note,
-            velocity,
-            active: true,
-        }
+    fn new(note: u8, _velocity: u8) -> Self {
+        Self { note, _velocity }
     }
 }
 
@@ -37,9 +37,13 @@ pub struct MidiState {
     pub last_note: Option<MidiNote>,
     pub error: Option<String>,
     pub note_count: u32,
-    pub message_log: Vec<String>,
 
-    pub output_connection: Option<midir::MidiOutputConnection>,
+    // logging incoming data for convenience
+    pub in_note_log: Vec<String>,
+    pub in_cc_log: Vec<String>,
+    pub in_other_log: Vec<String>,
+
+    pub output_connection: Option<MidiOutputConnection>,
     pub _input_connected: bool,
     pub _output_connected: bool,
     pub _clock_running: bool,
@@ -56,7 +60,9 @@ impl MidiState {
             last_note: None,
             error: None,
             note_count: 0,
-            message_log: Vec::new(),
+            in_note_log: Vec::new(),
+            in_cc_log: Vec::new(),
+            in_other_log: Vec::new(),
 
             output_connection: None,
             _input_connected: false,
@@ -103,40 +109,102 @@ impl MidiState {
         self.error = Some(error);
     }
 
-    pub fn add_message(&mut self, message: String) {
-        self.message_log.push(message);
-        if self.message_log.len() > 50 {
-            self.message_log.remove(0);
+    pub fn log_incoming_note(&mut self, message: String) {
+        self.in_note_log.push(message);
+        if self.in_note_log.len() > 200 {
+            self.in_note_log.remove(0);
         }
     }
 
-    pub fn get_note_display(&self) -> String {
-        if let Some(error) = &self.error {
-            return format!("MIDI Error: {}", error);
-        }
-
-        if let Some(last_note) = &self.last_note {
-            let note_name = Self::get_note_name(last_note.note);
-            return format!(
-                "♪ {} ({}) vel:{}",
-                note_name, last_note.note, last_note.velocity
-            );
-        }
-
-        let active_count = self.active_notes.iter().filter(|n| n.active).count();
-        if active_count > 0 {
-            format!("♪ {} note(s) active", active_count)
-        } else {
-            "No MIDI input".to_string()
+    pub fn log_incoming_cc(&mut self, message: String) {
+        self.in_cc_log.push(message);
+        if self.in_cc_log.len() > 200 {
+            self.in_cc_log.remove(0);
         }
     }
 
-    pub fn get_note_name(note: u8) -> String {
-        let notes = [
-            "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-        ];
-        let octave = (note / 12) as i8 - 1;
-        let note_index = (note % 12) as usize;
-        format!("{}{}", notes[note_index], octave)
+    pub fn log_misc(&mut self, message: String) {
+        self.in_other_log.push(message);
+        if self.in_other_log.len() > 200 {
+            self.in_other_log.remove(0);
+        }
     }
+
+    pub fn increase_bpm_by(&mut self, amount: f64) {
+        self.clock_bpm += amount;
+
+        if self.clock_bpm >= 200.0 {
+            self.clock_bpm = 200.0;
+        }
+    }
+
+    pub fn decrease_bpm_by(&mut self, amount: f64) {
+        self.clock_bpm -= amount;
+
+        if self.clock_bpm <= 40.0 {
+            self.clock_bpm = 40.0;
+        }
+    }
+}
+
+pub fn midi_rx_callback(midi_state: &Arc<Mutex<MidiState>>, message: &[u8]) -> Result<()> {
+    if message.len() >= 3 {
+        let status = message[0];
+        let data1 = message[1];
+        let data2 = message[2];
+
+        let message_type = status & 0xF0;
+        let mut state = midi_state.lock().unwrap();
+
+        match message_type {
+            0x90 => {
+                // Note On
+                if data2 > 0 {
+                    state.add_note(data1, data2);
+                    state.log_incoming_note(format!("NOTE ON:  {:02} {:02}", data1, data2));
+                } else {
+                    state.remove_note(data1);
+                    state.log_incoming_note(format!("NOTE OFF: {:02}", data1));
+                }
+            }
+
+            0x80 => {
+                // Note Off
+                state.remove_note(data1);
+                state.log_incoming_note(format!("NOTE OFF: {:02}", data1));
+            }
+
+            0xB0 => {
+                // Control Change
+                state.update_cc(data1, data2);
+                state.log_incoming_cc(format!("CC:       {:02} {:02}", data1, data2));
+            }
+
+            _ => {
+                state.log_misc(format!("MIDI: {:02X} {:02X} {:02X}", status, data1, data2));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn midi_tx_callback(midi_state: &Arc<Mutex<MidiState>>) -> Result<()> {
+    let mut state = midi_state.lock().unwrap();
+
+    if let Some(last_time) = state.last_clock_time {
+        let interval = Duration::from_micros((60_000_000.0 / (state.clock_bpm * 24.0)) as u64);
+
+        if last_time.elapsed() >= interval {
+            if let Some(ref mut conn) = state.output_connection {
+                const MIDI_CLOCK: &[u8] = &[0xF8];
+                conn.send(MIDI_CLOCK)
+                    .map_err(|e| anyhow::anyhow!("Failed to send MIDI Clock: {}", e))?;
+                state.last_clock_time = Some(Instant::now());
+                state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
+            }
+        }
+    } else {
+        state.last_clock_time = Some(Instant::now());
+    }
+    Ok(())
 }
