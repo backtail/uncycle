@@ -1,8 +1,15 @@
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
+
 pub mod devices;
 
 use anyhow::{Error, Result};
 use midir::MidiOutputConnection;
 use std::{
+    format,
+    string::String,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
