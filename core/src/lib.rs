@@ -38,12 +38,12 @@ pub struct MidiState {
     pub port_in_name: Option<String>,
     pub port_out_name: Option<String>,
 
-    pub clock_running: bool,
-    pub start_flag: bool,
-    pub stop_flag: bool,
-    pub clock_bpm: f64,
-    pub last_clock_time: Option<Instant>,
-    pub clock_pulse_count: u32,
+    clock_running: bool,
+    start_flag: bool,
+    stop_flag: bool,
+    clock_bpm: f64,
+    last_clock_time: Option<Instant>,
+    clock_pulse_count: u32,
 
     pub kill_rx_conn: bool,
     pub kill_tx_conn: bool,
@@ -148,6 +148,10 @@ impl MidiState {
         } else {
             0
         }
+    }
+
+    pub fn get_bpm(&self) -> f64 {
+        self.clock_bpm
     }
 }
 

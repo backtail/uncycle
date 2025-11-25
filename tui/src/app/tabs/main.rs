@@ -14,7 +14,7 @@ pub fn render_main_tab(f: &mut Frame, app: &App, area: Rect) {
     {
         let mut state = app.midi_state.lock().unwrap();
         status_text = vec![
-            Line::from(format!("BPM: {}", state.clock_bpm)),
+            Line::from(format!("BPM: {}", state.get_bpm())),
             Line::from(format!("Step: {}", state.get_step_number() + 1)),
         ];
     }

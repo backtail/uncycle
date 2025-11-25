@@ -23,7 +23,7 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
         Ok(input) => input,
         Err(e) => {
             let mut state = midi_state.lock().unwrap();
-            state.set_error(format!("Failed to create MIDI input: {}", e));
+            state.log_misc(format!("Failed to create MIDI input: {}", e));
             return;
         }
     };
@@ -32,7 +32,7 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
 
     if in_ports.is_empty() {
         let mut state = midi_state.lock().unwrap();
-        state.set_error("No MIDI input ports available".to_string());
+        state.log_misc("No MIDI input ports available".to_string());
         return;
     }
 
@@ -51,7 +51,7 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
         Ok(name) => name,
         Err(e) => {
             let mut state = midi_state.lock().unwrap();
-            state.set_error(format!("Failed to get port name: {}", e));
+            state.log_misc(format!("Failed to get port name: {}", e));
             return;
         }
     };
@@ -96,7 +96,7 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
 
         Err(e) => {
             let mut state = midi_state.lock().unwrap();
-            state.set_error(format!("Failed to connect to MIDI port: {}", e));
+            state.log_misc(format!("Failed to connect to MIDI port: {}", e));
         }
     }
 }
@@ -106,7 +106,7 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
         Ok(output) => output,
         Err(e) => {
             let mut state = midi_state.lock().unwrap();
-            state.set_error(format!("Failed to create MIDI output: {}", e));
+            state.log_misc(format!("Failed to create MIDI output: {}", e));
             return;
         }
     };
@@ -115,7 +115,7 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
 
     if out_ports.is_empty() {
         let mut state = midi_state.lock().unwrap();
-        state.set_error("No MIDI output ports available".to_string());
+        state.log_misc("No MIDI output ports available".to_string());
         return;
     }
 
@@ -132,7 +132,7 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
         Ok(name) => name,
         Err(e) => {
             let mut state = midi_state.lock().unwrap();
-            state.set_error(format!("Failed to get output port name: {}", e));
+            state.log_misc(format!("Failed to get output port name: {}", e));
             return;
         }
     };
@@ -165,7 +165,7 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
 
         Err(e) => {
             let mut state = midi_state.lock().unwrap();
-            state.set_error(format!("Failed to connect to MIDI port: {}", e));
+            state.log_misc(format!("Failed to connect to MIDI port: {}", e));
         }
     }
 }
