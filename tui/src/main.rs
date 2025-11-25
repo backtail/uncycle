@@ -1,7 +1,6 @@
 mod app;
 mod device;
 mod keybindings;
-mod midi;
 
 use anyhow::Result;
 use app::{run_app, App};

@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use crate::midi::{midi_rx_callback, midi_tx_callback, MidiState};
+use uncycle_core::{midi_rx_callback, midi_tx_callback, MidiState};
 
 pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>) {
     let midi_state_output = Arc::clone(&midi_state);

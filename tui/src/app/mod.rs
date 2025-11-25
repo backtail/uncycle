@@ -1,7 +1,7 @@
 pub mod connection;
 pub mod tabs;
 
-use crate::{app, keybindings, midi};
+use crate::{app, keybindings};
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -22,8 +22,8 @@ use app::connection::setup_midi_socket;
 
 use keybindings::{Action, Keybindings};
 
-use midi::MidiState;
 use tabs::*;
+use uncycle_core::MidiState;
 
 #[derive(PartialEq)]
 enum AppTab {

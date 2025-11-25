@@ -1,3 +1,5 @@
+pub mod devices;
+
 use anyhow::{Error, Result};
 use midir::MidiOutputConnection;
 use std::{
