@@ -10,11 +10,12 @@ pub struct KeyAction {
 #[derive(Debug, Clone)]
 pub enum Action {
     Quit,
-    StartRecording,
-    StopRecording,
-    StartPlayback,
-    TogglePlayback,
-    ClearLoop,
+    IncreaseBPM,
+    DecreaseBPM,
+    CycleTabs,
+    RevCycleTabs,
+    ToggleSequence,
+    KillConnection,
 }
 
 pub struct Keybindings {
@@ -35,54 +36,34 @@ impl Keybindings {
                 action: Action::Quit,
             },
             KeyAction {
-                key: KeyCode::Esc,
-                description: "Quit application",
-                action: Action::Quit,
+                key: KeyCode::Char('+'),
+                description: "Increase BPM",
+                action: Action::IncreaseBPM,
             },
             KeyAction {
-                key: KeyCode::Char('r'),
-                description: "Start recording",
-                action: Action::StartRecording,
+                key: KeyCode::Char('-'),
+                description: "Decrease BPM",
+                action: Action::DecreaseBPM,
             },
             KeyAction {
-                key: KeyCode::Char('R'),
-                description: "Start recording",
-                action: Action::StartRecording,
+                key: KeyCode::Tab,
+                description: "Cycle Tabs",
+                action: Action::CycleTabs,
             },
             KeyAction {
-                key: KeyCode::Char('s'),
-                description: "Stop recording and playback",
-                action: Action::StopRecording,
-            },
-            KeyAction {
-                key: KeyCode::Char('S'),
-                description: "Stop recording and playback",
-                action: Action::StopRecording,
-            },
-            KeyAction {
-                key: KeyCode::Char('p'),
-                description: "Start playback",
-                action: Action::StartPlayback,
-            },
-            KeyAction {
-                key: KeyCode::Char('P'),
-                description: "Start playback",
-                action: Action::StartPlayback,
+                key: KeyCode::BackTab,
+                description: "Reverse Cycle Tabs",
+                action: Action::RevCycleTabs,
             },
             KeyAction {
                 key: KeyCode::Char(' '),
-                description: "Toggle play/stop",
-                action: Action::TogglePlayback,
+                description: "Start/Stop Sequence",
+                action: Action::ToggleSequence,
             },
             KeyAction {
-                key: KeyCode::Char('c'),
-                description: "Clear loop",
-                action: Action::ClearLoop,
-            },
-            KeyAction {
-                key: KeyCode::Char('C'),
-                description: "Clear loop",
-                action: Action::ClearLoop,
+                key: KeyCode::Esc,
+                description: "Kill MIDI connection",
+                action: Action::KillConnection,
             },
         ];
 

@@ -1,6 +1,6 @@
 [package]
 name = "uncycle-tui"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A real-time MIDI tool that extends existing hardware synth capabilities."
 authors = ["backtail <mail@maxgenson.de>"]
@@ -12,3 +12,4 @@ crossterm = "0.29"
 ratatui = "0.29"
 anyhow = "1.0"
 midir = "0.10"
+uncycle-core = { path = "../core/" }

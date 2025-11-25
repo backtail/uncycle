@@ -42,10 +42,9 @@ nix run
 cargo run --release
 ```
 
-
 ## Core Library
 
-Seperating the internal MIDI and business logic from the TUI is planned soon. It will become a `no_std` crate and provide a `cbindgen` API for crosscompiling on embedded platforms with C.
+The busines logic mostly has been seperated from the TUI. Next steps include better async thread handling and `no_std` by default. At some point (hopefully) I will provide a `cbindgen` API for crosscompiling on embedded platforms with C.
 
 ## Hardware
 
@@ -55,7 +54,8 @@ The long-term plan is to run this software on dedicated hardware, i.e. a small s
 
 ```shell
 uncycle/
-├── core/   # (planned) platform-agnostic logic
+├── core/   # platform-agnostic logic (not `no_std` yet)
 ├── fw/     # (planned) firmware for embedded device
-└── tui/    # frontend and backend for PC use
+├── tui/    # frontend and backend for PC use
+└── vst/    # maybe, who knows
 ```
