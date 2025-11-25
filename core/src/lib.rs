@@ -9,7 +9,7 @@ use std::{
 
 use heapless::Vec;
 
-const ACTIVE_NOTES_BUFFER_LEN: usize = 128;
+const N_NOTES: usize = 128;
 const N_CC_NUMBERS: usize = 128;
 const MESSAGE_BUFFER_LEN: usize = 256;
 
@@ -17,38 +17,11 @@ const MIDI_CLOCK: u8 = 0xF8;
 const MIDI_START: u8 = 0xFA;
 const MIDI_STOP: u8 = 0xFC;
 
-// MIDI note representation
-#[derive(Clone, Debug)]
-pub struct MidiNote {
-    pub note: u8,
-    pub _velocity: u8,
-}
-
-// MIDI CC representation
-#[derive(Clone, Debug)]
-pub struct MidiCC {
-    pub cc_num: u8,
-    pub cc_val: u8,
-}
-
-impl MidiNote {
-    fn new(note: u8, _velocity: u8) -> Self {
-        Self { note, _velocity }
-    }
-}
-
-impl MidiCC {
-    fn new(cc_num: u8, cc_val: u8) -> Self {
-        Self { cc_num, cc_val }
-    }
-}
-
 pub struct MidiState {
-    pub active_notes: Vec<MidiNote, ACTIVE_NOTES_BUFFER_LEN>,
-    pub last_cc: Vec<MidiCC, N_CC_NUMBERS>, // make space for all possible values
-    pub last_note: Option<MidiNote>,
-    pub error: Option<String>,
-    pub note_count: u32,
+    /// allocate space for all possible values
+    active_notes: [Option<u8>; N_NOTES],
+    /// allocate space for all possible values
+    last_cc: [Option<u8>; N_CC_NUMBERS],
 
     // logging data for convenience
     pub in_note_log: Vec<String, MESSAGE_BUFFER_LEN>,
@@ -72,11 +45,8 @@ pub struct MidiState {
 impl MidiState {
     pub fn new() -> Self {
         Self {
-            active_notes: Vec::new(),
-            last_cc: Vec::new(),
-            last_note: None,
-            error: None,
-            note_count: 0,
+            active_notes: [None; N_NOTES],
+            last_cc: [None; N_CC_NUMBERS],
 
             in_note_log: Vec::new(),
             in_cc_log: Vec::new(),
@@ -97,39 +67,24 @@ impl MidiState {
         }
     }
 
-    pub fn add_note(&mut self, note: u8, velocity: u8) {
-        let midi_note = MidiNote::new(note, velocity);
-        self.active_notes.push(midi_note.clone()).unwrap();
-        self.last_note = Some(midi_note);
-        self.note_count += 1;
+    pub fn update_note(&mut self, note: u8, velocity: u8) {
+        self.active_notes[note as usize] = Some(velocity);
     }
 
     pub fn update_cc(&mut self, cc_num: u8, cc_val: u8) {
-        if let Some(old) = self.last_cc.iter_mut().find(|n| n.cc_num == cc_num) {
-            old.cc_val = cc_val
-        } else {
-            self.last_cc.push(MidiCC::new(cc_num, cc_val)).unwrap();
-        }
+        self.last_cc[cc_num as usize] = Some(cc_val);
     }
 
     pub fn remove_note(&mut self, note: u8) {
-        self.active_notes.retain(|n| n.note != note);
+        self.active_notes[note as usize] = None;
     }
 
     pub fn find_active_note(&mut self, note: u8) -> bool {
-        self.active_notes.iter().find(|n| n.note == note).is_some()
+        self.active_notes[note as usize].is_some()
     }
 
     pub fn get_cc_val_of(&mut self, cc_num: u8) -> u8 {
-        if let Some(exists) = self.last_cc.iter().find(|n| n.cc_num == cc_num) {
-            exists.cc_val
-        } else {
-            0
-        }
-    }
-
-    pub fn set_error(&mut self, error: String) {
-        self.error = Some(error);
+        self.last_cc[cc_num as usize].unwrap_or(0)
     }
 
     pub fn log_incoming_note(&mut self, message: String) {
@@ -203,7 +158,7 @@ pub fn midi_rx_callback(midi_state: &Arc<Mutex<MidiState>>, message: &[u8]) -> R
             0x90 => {
                 // Note On
                 if data2 > 0 {
-                    state.add_note(data1, data2);
+                    state.update_note(data1, data2);
                     state.log_incoming_note(format!("NOTE ON:  {:02} {:02}", data1, data2));
                 } else {
                     state.remove_note(data1);
