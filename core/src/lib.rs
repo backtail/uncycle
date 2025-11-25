@@ -7,19 +7,25 @@ use std::{
     time::{Duration, Instant},
 };
 
+use heapless::Vec;
+
+const ACTIVE_NOTES_BUFFER_LEN: usize = 128;
+const N_CC_NUMBERS: usize = 128;
+const MESSAGE_BUFFER_LEN: usize = 256;
+
 const MIDI_CLOCK: u8 = 0xF8;
 const MIDI_START: u8 = 0xFA;
 const MIDI_STOP: u8 = 0xFC;
 
 // MIDI note representation
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MidiNote {
     pub note: u8,
     pub _velocity: u8,
 }
 
 // MIDI CC representation
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MidiCC {
     pub cc_num: u8,
     pub cc_val: u8,
@@ -38,16 +44,16 @@ impl MidiCC {
 }
 
 pub struct MidiState {
-    pub active_notes: Vec<MidiNote>,
-    pub last_cc: Vec<MidiCC>,
+    pub active_notes: Vec<MidiNote, ACTIVE_NOTES_BUFFER_LEN>,
+    pub last_cc: Vec<MidiCC, N_CC_NUMBERS>, // make space for all possible values
     pub last_note: Option<MidiNote>,
     pub error: Option<String>,
     pub note_count: u32,
 
     // logging data for convenience
-    pub in_note_log: Vec<String>,
-    pub in_cc_log: Vec<String>,
-    pub in_other_log: Vec<String>,
+    pub in_note_log: Vec<String, MESSAGE_BUFFER_LEN>,
+    pub in_cc_log: Vec<String, MESSAGE_BUFFER_LEN>,
+    pub in_other_log: Vec<String, MESSAGE_BUFFER_LEN>,
 
     pub port_in_name: Option<String>,
     pub port_out_name: Option<String>,
@@ -93,7 +99,7 @@ impl MidiState {
 
     pub fn add_note(&mut self, note: u8, velocity: u8) {
         let midi_note = MidiNote::new(note, velocity);
-        self.active_notes.push(midi_note.clone());
+        self.active_notes.push(midi_note.clone()).unwrap();
         self.last_note = Some(midi_note);
         self.note_count += 1;
     }
@@ -102,7 +108,7 @@ impl MidiState {
         if let Some(old) = self.last_cc.iter_mut().find(|n| n.cc_num == cc_num) {
             old.cc_val = cc_val
         } else {
-            self.last_cc.push(MidiCC::new(cc_num, cc_val));
+            self.last_cc.push(MidiCC::new(cc_num, cc_val)).unwrap();
         }
     }
 
@@ -127,24 +133,27 @@ impl MidiState {
     }
 
     pub fn log_incoming_note(&mut self, message: String) {
-        self.in_note_log.push(message);
-        if self.in_note_log.len() > 200 {
+        if self.in_note_log.is_full() {
             self.in_note_log.remove(0);
         }
+
+        self.in_note_log.push(message).unwrap();
     }
 
     pub fn log_incoming_cc(&mut self, message: String) {
-        self.in_cc_log.push(message);
-        if self.in_cc_log.len() > 200 {
+        if self.in_cc_log.is_full() {
             self.in_cc_log.remove(0);
         }
+
+        self.in_cc_log.push(message).unwrap();
     }
 
     pub fn log_misc(&mut self, message: String) {
-        self.in_other_log.push(message);
-        if self.in_other_log.len() > 200 {
+        if self.in_other_log.is_full() {
             self.in_other_log.remove(0);
         }
+
+        self.in_other_log.push(message).unwrap();
     }
 
     pub fn increase_bpm_by(&mut self, amount: f64) {
