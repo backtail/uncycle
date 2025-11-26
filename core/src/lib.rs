@@ -5,9 +5,7 @@ extern crate std;
 
 pub mod devices;
 
-use std::{format, string::String, time::Instant};
-
-use core::time::Duration;
+use std::{format, string::String};
 
 use heapless::Vec;
 
@@ -39,7 +37,7 @@ pub struct MidiState {
     start_flag: bool,
     stop_flag: bool,
     clock_bpm: f32,
-    last_clock_time: Option<Instant>,
+    last_clock_time: u64, // in microseconds
     clock_pulse_count: u32,
 
     pub kill_rx_conn: bool,
@@ -63,7 +61,7 @@ impl MidiState {
             start_flag: false,
             stop_flag: false,
             clock_bpm: 120.0,
-            last_clock_time: None,
+            last_clock_time: 0,
             clock_pulse_count: 0,
 
             kill_rx_conn: false,
@@ -151,8 +149,8 @@ impl MidiState {
         self.clock_bpm
     }
 
-    // timestamp in microseconds
-    pub fn midi_tx_callback(&mut self) -> Vec<u8, TX_MIDI_Q_LEN> {
+    // timestamp is time elapsed since beginning of program start in microseconds
+    pub fn midi_tx_callback(&mut self, elapsed: u64) -> Vec<u8, TX_MIDI_Q_LEN> {
         let state = self;
         let mut tx_q = Vec::new();
 
@@ -176,17 +174,13 @@ impl MidiState {
         }
 
         // MIDI Clock
-        if let Some(last_time) = state.last_clock_time {
-            let interval = Duration::from_micros((60_000_000.0 / (state.clock_bpm * 24.0)) as u64);
+        let interval = (60_000_000.0 / (state.clock_bpm * 24.0)) as u64;
 
-            if last_time.elapsed() >= interval {
-                tx_q.push(MIDI_CLOCK).ok();
+        if elapsed - state.last_clock_time >= interval {
+            state.last_clock_time = elapsed;
+            state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
 
-                state.last_clock_time = Some(Instant::now());
-                state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
-            }
-        } else {
-            state.last_clock_time = Some(Instant::now());
+            tx_q.push(MIDI_CLOCK).ok();
         }
 
         tx_q

@@ -1,7 +1,7 @@
 use std::{
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use uncycle_core::MidiState;
@@ -113,17 +113,20 @@ pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
                 state.log_misc(format!("Connected to MIDI out port: {}", port_name));
             }
 
+            let start_time = Instant::now();
+
             loop {
                 // poll @ 1kHz
                 thread::sleep(Duration::from_millis(1));
 
                 let bytes;
+                let elapsed = start_time.elapsed().as_micros() as u64;
 
                 {
-                    let mut state = midi_state.lock().unwrap();
-                    bytes = state.midi_tx_callback();
+                    bytes = midi_state.lock().unwrap().midi_tx_callback(elapsed);
                 }
 
+                // send MIDI outside of lock
                 conn.send(&bytes).ok();
             }
         }
