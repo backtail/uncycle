@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use uncycle_core::{midi_rx_callback, midi_tx_callback, MidiState};
+use uncycle_core::MidiState;
 
 pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>) {
     let midi_state_output = Arc::clone(&midi_state);
@@ -18,7 +18,7 @@ pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>) {
     });
 }
 
-fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
+pub fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
     let input = match midir::MidiInput::new("uncycle_midi_input") {
         Ok(input) => input,
         Err(e) => {
@@ -47,61 +47,27 @@ fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>) {
         }
     }
 
-    let port_name = match input.port_name(in_port) {
-        Ok(name) => name,
-        Err(e) => {
-            let mut state = midi_state.lock().unwrap();
-            state.log_misc(format!("Failed to get port name: {}", e));
-            return;
-        }
-    };
-
-    let midi_state_clone = Arc::clone(&midi_state);
-
     // callback function is defined before entering loop
     let conn_result = input.connect(
         in_port,
         "uncycle-midi-in",
         move |_timestamp, message, _| {
-            midi_rx_callback(&midi_state_clone, message).unwrap();
+            let mut state = midi_state.lock().unwrap();
+            state.midi_rx_callback(message);
         },
         (),
     );
 
     match conn_result {
-        Ok(_conn) => {
-            {
-                let mut state = midi_state.lock().unwrap();
-                state.port_in_name = Some(port_name.clone());
-                state.log_misc(format!("Connected to MIDI in port: {}", port_name));
-            }
+        Ok(_conn) => loop {
+            thread::sleep(Duration::from_millis(16));
+        },
 
-            // Keep thread alive until user kills or switches it
-            loop {
-                thread::sleep(Duration::from_millis(16));
-                {
-                    {
-                        let mut state = midi_state.lock().unwrap();
-
-                        if state.kill_rx_conn {
-                            state.kill_rx_conn = false;
-                            state.port_in_name = None;
-                            state.log_misc(format!("MIDI RX connection killed"));
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        Err(e) => {
-            let mut state = midi_state.lock().unwrap();
-            state.log_misc(format!("Failed to connect to MIDI port: {}", e));
-        }
+        Err(_e) => {}
     }
 }
 
-fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
+pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
     let output = match midir::MidiOutput::new("uncycle_midi_output") {
         Ok(output) => output,
         Err(e) => {
@@ -151,15 +117,14 @@ fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>) {
                 // poll @ 1kHz
                 thread::sleep(Duration::from_millis(1));
 
-                // callback function is being called inside loop via polling until user kills or switches port
-                if let Err(e) = midi_tx_callback(&midi_state, &mut conn) {
-                    {
-                        let mut state = midi_state.lock().unwrap();
-                        state.port_out_name = None;
-                        state.log_misc(format!("{}", e));
-                    }
-                    break;
+                let bytes;
+
+                {
+                    let mut state = midi_state.lock().unwrap();
+                    bytes = state.midi_tx_callback();
                 }
+
+                conn.send(&bytes).ok();
             }
         }
 

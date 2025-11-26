@@ -10,10 +10,6 @@ repository = "https://github.com/backtail/uncycle"
 [dependencies]
 heapless = "0.9.2"
 
-# I want to get rid of those eventually and become `no_std`
-anyhow = "1.0"
-midir = "0.10"
-
 [features]
 default = ["std"]
 std = []

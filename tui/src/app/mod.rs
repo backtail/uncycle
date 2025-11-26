@@ -1,7 +1,7 @@
 pub mod connection;
 pub mod tabs;
 
-use crate::{app, keybindings};
+use crate::keybindings;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -18,10 +18,9 @@ use std::{
     time::Duration,
 };
 
-use app::connection::setup_midi_socket;
-
 use keybindings::{Action, Keybindings};
 
+use crate::app::connection::setup_midi_socket;
 use tabs::*;
 use uncycle_core::MidiState;
 

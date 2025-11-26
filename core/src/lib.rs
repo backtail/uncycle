@@ -5,14 +5,9 @@ extern crate std;
 
 pub mod devices;
 
-use anyhow::{Error, Result};
-use midir::MidiOutputConnection;
-use std::{
-    format,
-    string::String,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::{format, string::String, time::Instant};
+
+use core::time::Duration;
 
 use heapless::Vec;
 
@@ -23,6 +18,8 @@ const MESSAGE_BUFFER_LEN: usize = 256;
 const MIDI_CLOCK: u8 = 0xF8;
 const MIDI_START: u8 = 0xFA;
 const MIDI_STOP: u8 = 0xFC;
+
+const TX_MIDI_Q_LEN: usize = 16;
 
 pub struct MidiState {
     /// allocate space for all possible values
@@ -41,7 +38,7 @@ pub struct MidiState {
     clock_running: bool,
     start_flag: bool,
     stop_flag: bool,
-    clock_bpm: f64,
+    clock_bpm: f32,
     last_clock_time: Option<Instant>,
     clock_pulse_count: u32,
 
@@ -118,7 +115,7 @@ impl MidiState {
         self.in_other_log.push(message).unwrap();
     }
 
-    pub fn increase_bpm_by(&mut self, amount: f64) {
+    pub fn increase_bpm_by(&mut self, amount: f32) {
         self.clock_bpm += amount;
 
         if self.clock_bpm >= 200.0 {
@@ -126,7 +123,7 @@ impl MidiState {
         }
     }
 
-    pub fn decrease_bpm_by(&mut self, amount: f64) {
+    pub fn decrease_bpm_by(&mut self, amount: f32) {
         self.clock_bpm -= amount;
 
         if self.clock_bpm <= 40.0 {
@@ -150,97 +147,89 @@ impl MidiState {
         }
     }
 
-    pub fn get_bpm(&self) -> f64 {
+    pub fn get_bpm(&self) -> f32 {
         self.clock_bpm
     }
-}
 
-// is executed in dedicated thread
-pub fn midi_rx_callback(midi_state: &Arc<Mutex<MidiState>>, message: &[u8]) -> Result<()> {
-    if message.len() >= 3 {
-        let status = message[0];
-        let data1 = message[1];
-        let data2 = message[2];
+    // timestamp in microseconds
+    pub fn midi_tx_callback(&mut self) -> Vec<u8, TX_MIDI_Q_LEN> {
+        let state = self;
+        let mut tx_q = Vec::new();
 
-        let message_type = status & 0xF0;
-        let mut state = midi_state.lock().unwrap();
+        // MIDI Start
+        if state.start_flag {
+            state.start_flag = false;
+            state.clock_running = true;
 
-        match message_type {
-            0x90 => {
-                // Note On
-                if data2 > 0 {
-                    state.update_note(data1, data2);
-                    state.log_incoming_note(format!("NOTE ON:  {:02} {:02}", data1, data2));
-                } else {
+            tx_q.push(MIDI_START).ok();
+            state.clock_pulse_count = 0;
+            state.log_misc(format!("Send: 0x{:02X} (MIDI Start)", MIDI_START));
+        }
+
+        // MIDI Stop
+        if state.stop_flag {
+            state.stop_flag = false;
+            state.clock_running = false;
+
+            tx_q.push(MIDI_STOP).ok();
+            state.log_misc(format!("Send: 0x{:02X} (MIDI Stop)", MIDI_STOP));
+        }
+
+        // MIDI Clock
+        if let Some(last_time) = state.last_clock_time {
+            let interval = Duration::from_micros((60_000_000.0 / (state.clock_bpm * 24.0)) as u64);
+
+            if last_time.elapsed() >= interval {
+                tx_q.push(MIDI_CLOCK).ok();
+
+                state.last_clock_time = Some(Instant::now());
+                state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
+            }
+        } else {
+            state.last_clock_time = Some(Instant::now());
+        }
+
+        tx_q
+    }
+
+    pub fn midi_rx_callback(&mut self, message: &[u8]) {
+        let state = self;
+
+        if message.len() >= 3 {
+            let status = message[0];
+            let data1 = message[1];
+            let data2 = message[2];
+
+            let message_type = status & 0xF0;
+
+            match message_type {
+                0x90 => {
+                    // Note On
+                    if data2 > 0 {
+                        state.update_note(data1, data2);
+                        state.log_incoming_note(format!("NOTE ON:  {:02} {:02}", data1, data2));
+                    } else {
+                        state.remove_note(data1);
+                        state.log_incoming_note(format!("NOTE OFF: {:02}", data1));
+                    }
+                }
+
+                0x80 => {
+                    // Note Off
                     state.remove_note(data1);
                     state.log_incoming_note(format!("NOTE OFF: {:02}", data1));
                 }
-            }
 
-            0x80 => {
-                // Note Off
-                state.remove_note(data1);
-                state.log_incoming_note(format!("NOTE OFF: {:02}", data1));
-            }
+                0xB0 => {
+                    // Control Change
+                    state.update_cc(data1, data2);
+                    state.log_incoming_cc(format!("CC:       {:02} {:02}", data1, data2));
+                }
 
-            0xB0 => {
-                // Control Change
-                state.update_cc(data1, data2);
-                state.log_incoming_cc(format!("CC:       {:02} {:02}", data1, data2));
-            }
-
-            _ => {
-                state.log_misc(format!("MIDI: {:02X} {:02X} {:02X}", status, data1, data2));
+                _ => {
+                    state.log_misc(format!("MIDI: {:02X} {:02X} {:02X}", status, data1, data2));
+                }
             }
         }
-    }
-    Ok(())
-}
-
-// is executed in dedicated thread
-pub fn midi_tx_callback(
-    midi_state: &Arc<Mutex<MidiState>>,
-    conn: &mut MidiOutputConnection,
-) -> Result<()> {
-    let mut state = midi_state.lock().unwrap();
-
-    // MIDI Start
-    if state.start_flag {
-        state.start_flag = false;
-        state.clock_running = true;
-
-        conn.send(&[MIDI_START]).unwrap();
-        state.clock_pulse_count = 0;
-        state.log_misc(format!("Send: 0x{:02X} (MIDI Start)", MIDI_START));
-    }
-
-    // MIDI Stop
-    if state.stop_flag {
-        state.stop_flag = false;
-        state.clock_running = false;
-
-        conn.send(&[MIDI_STOP]).unwrap();
-        state.log_misc(format!("Send: 0x{:02X} (MIDI Stop)", MIDI_STOP));
-    }
-
-    // MIDI Clock
-    if let Some(last_time) = state.last_clock_time {
-        let interval = Duration::from_micros((60_000_000.0 / (state.clock_bpm * 24.0)) as u64);
-
-        if last_time.elapsed() >= interval {
-            conn.send(&[MIDI_CLOCK]).unwrap();
-
-            state.last_clock_time = Some(Instant::now());
-            state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
-        }
-    } else {
-        state.last_clock_time = Some(Instant::now());
-    }
-
-    if !state.kill_tx_conn {
-        state.kill_tx_conn = false;
-        Ok(())
-    } else {
-        Err(Error::msg("MIDI TX connection killed"))
     }
 }
