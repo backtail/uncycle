@@ -6,9 +6,9 @@ use std::{
 
 use uncycle_core::{parse_midi_message, MidiState};
 
-use crate::app::MidiLogger;
+use super::log::Logger;
 
-pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mutex<MidiLogger>>) {
+pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mutex<Logger>>) {
     let midi_state_output = Arc::clone(&midi_state);
     let midi_logger_output = Arc::clone(&midi_logger);
 
@@ -21,7 +21,7 @@ pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mut
     });
 }
 
-pub fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mutex<MidiLogger>>) {
+pub fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mutex<Logger>>) {
     let input = match midir::MidiInput::new("uncycle_midi_input") {
         Ok(input) => input,
         Err(e) => {
@@ -104,7 +104,7 @@ pub fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mut
     }
 }
 
-pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mutex<MidiLogger>>) {
+pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mutex<Logger>>) {
     let output = match midir::MidiOutput::new("uncycle_midi_output") {
         Ok(output) => output,
         Err(e) => {

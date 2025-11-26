@@ -1,6 +1,5 @@
 mod app;
 mod device;
-mod keybindings;
 
 use anyhow::Result;
 use app::{run_app, App};
