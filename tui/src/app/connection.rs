@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use uncycle_core::{parse_midi_message, UncycleCore};
+use uncycle_core::prelude::*;
 
 use super::log::Logger;
 

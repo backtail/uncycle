@@ -17,7 +17,7 @@ use std::{
 
 use keybindings::{Action, Keybindings};
 
-use uncycle_core::UncycleCore;
+use uncycle_core::prelude::*;
 
 #[derive(PartialEq)]
 enum AppTab {
