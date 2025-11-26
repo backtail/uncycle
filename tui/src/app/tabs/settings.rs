@@ -12,7 +12,7 @@ use app::App;
 const NO_INPUT: &str = "Not set";
 
 pub fn render_settings_tab(f: &mut Frame, _app: &App, area: Rect) {
-    let state = _app.midi_state.lock().unwrap();
+    let state = _app.midi_logger.lock().unwrap();
     let settings_text = vec![
         Line::from(format!(
             "In port:  {}",

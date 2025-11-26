@@ -688,6 +688,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "crossterm 0.29.0",
+ "heapless",
  "midir",
  "ratatui",
  "uncycle-core",

@@ -24,6 +24,10 @@ use crate::app::connection::setup_midi_socket;
 use tabs::*;
 use uncycle_core::MidiState;
 
+use heapless::Vec;
+
+const MESSAGE_BUFFER_LEN: usize = 256;
+
 #[derive(PartialEq)]
 enum AppTab {
     Main = 1,
@@ -33,9 +37,55 @@ enum AppTab {
     Help = 5,
 }
 
+pub struct MidiLogger {
+    pub in_note_log: Vec<String, MESSAGE_BUFFER_LEN>,
+    pub in_cc_log: Vec<String, MESSAGE_BUFFER_LEN>,
+    pub in_other_log: Vec<String, MESSAGE_BUFFER_LEN>,
+
+    pub port_in_name: Option<String>,
+    pub port_out_name: Option<String>,
+}
+
+impl MidiLogger {
+    pub fn new() -> Self {
+        Self {
+            in_note_log: Vec::new(),
+            in_cc_log: Vec::new(),
+            in_other_log: Vec::new(),
+            port_in_name: None,
+            port_out_name: None,
+        }
+    }
+
+    pub fn log_incoming_note(&mut self, message: String) {
+        if self.in_note_log.is_full() {
+            self.in_note_log.remove(0);
+        }
+
+        self.in_note_log.push(message).unwrap();
+    }
+
+    pub fn log_incoming_cc(&mut self, message: String) {
+        if self.in_cc_log.is_full() {
+            self.in_cc_log.remove(0);
+        }
+
+        self.in_cc_log.push(message).unwrap();
+    }
+
+    pub fn log_misc(&mut self, message: String) {
+        if self.in_other_log.is_full() {
+            self.in_other_log.remove(0);
+        }
+
+        self.in_other_log.push(message).unwrap();
+    }
+}
+
 pub struct App {
     keybindings: Keybindings,
     pub midi_state: Arc<Mutex<MidiState>>,
+    midi_logger: Arc<Mutex<MidiLogger>>,
     current_tab: AppTab,
     should_quit: bool,
 }
@@ -45,6 +95,7 @@ impl App {
         Self {
             keybindings: Keybindings::new(),
             midi_state: Arc::new(Mutex::new(MidiState::new())),
+            midi_logger: Arc::new(Mutex::new(MidiLogger::new())),
             current_tab: AppTab::Main,
             should_quit: false,
         }
@@ -109,7 +160,7 @@ impl App {
 }
 
 pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
-    setup_midi_socket(app.midi_state.clone());
+    setup_midi_socket(app.midi_state.clone(), app.midi_logger.clone());
 
     while !app.should_quit {
         terminal.draw(|f| ui(f, app))?;
