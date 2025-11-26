@@ -11,16 +11,19 @@ use app::App;
 
 const NO_INPUT: &str = "Not set";
 
-pub fn render_settings_tab(f: &mut Frame, _app: &App, area: Rect) {
-    let state = _app.midi_logger.lock().unwrap();
+pub fn render_settings_tab(f: &mut Frame, app: &App, area: Rect) {
+    let locked = app.log.lock().unwrap();
     let settings_text = vec![
         Line::from(format!(
             "In port:  {}",
-            state.port_in_name.as_ref().unwrap_or(&NO_INPUT.to_string())
+            locked
+                .port_in_name
+                .as_ref()
+                .unwrap_or(&NO_INPUT.to_string())
         )),
         Line::from(format!(
             "Out port: {}",
-            state
+            locked
                 .port_out_name
                 .as_ref()
                 .unwrap_or(&NO_INPUT.to_string())

@@ -16,10 +16,10 @@ pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Ratio(1, 2); 3])
         .split(area);
 
-    let logger = app.midi_logger.lock().unwrap();
+    let log = app.log.lock().unwrap();
 
     // Message log
-    let incoming_notes: Vec<ListItem> = logger
+    let incoming_notes: Vec<ListItem> = log
         .in_note_log
         .iter()
         .rev() // Show newest first
@@ -27,7 +27,7 @@ pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
         .map(|msg| ListItem::new(Line::from(msg.as_str())))
         .collect();
 
-    let incoming_cc: Vec<ListItem> = logger
+    let incoming_cc: Vec<ListItem> = log
         .in_cc_log
         .iter()
         .rev() // Show newest first
@@ -35,7 +35,7 @@ pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
         .map(|msg| ListItem::new(Line::from(msg.as_str())))
         .collect();
 
-    let misc: Vec<ListItem> = logger
+    let misc: Vec<ListItem> = log
         .in_other_log
         .iter()
         .rev() // Show newest first

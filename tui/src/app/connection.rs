@@ -4,29 +4,28 @@ use std::{
     time::{Duration, Instant},
 };
 
-use uncycle_core::{parse_midi_message, MidiState};
+use uncycle_core::{parse_midi_message, UncycleCore};
 
 use super::log::Logger;
 
-pub fn setup_midi_socket(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mutex<Logger>>) {
-    let midi_state_output = Arc::clone(&midi_state);
-    let midi_logger_output = Arc::clone(&midi_logger);
+pub fn setup_midi_socket(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>) {
+    let core_arc_clone = Arc::clone(&core);
+    let log_arc_clone = Arc::clone(&log);
 
     thread::spawn(move || {
-        midi_input_thread(midi_state, midi_logger);
+        midi_input_thread(core, log);
     });
 
     thread::spawn(move || {
-        midi_output_thread(midi_state_output, midi_logger_output);
+        midi_output_thread(core_arc_clone, log_arc_clone);
     });
 }
 
-pub fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mutex<Logger>>) {
+pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>) {
     let input = match midir::MidiInput::new("uncycle_midi_input") {
         Ok(input) => input,
         Err(e) => {
-            midi_logger
-                .lock()
+            log.lock()
                 .unwrap()
                 .log_misc(format!("Failed to create MIDI input: {}", e));
             return;
@@ -36,8 +35,7 @@ pub fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mut
     let in_ports = input.ports();
 
     if in_ports.is_empty() {
-        midi_logger
-            .lock()
+        log.lock()
             .unwrap()
             .log_misc("No MIDI input ports available".to_string());
         return;
@@ -60,7 +58,7 @@ pub fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mut
         "uncycle-midi-in",
         move |_timestamp, message, _| {
             // first handle midi logic
-            midi_state.lock().unwrap().midi_rx_callback(message);
+            core.lock().unwrap().midi_rx_callback(message);
 
             // then handle logging
             if let Some(msg) = parse_midi_message(message) {
@@ -73,19 +71,19 @@ pub fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mut
                 const MIDI_CONTORL_CHANGE: u8 = 0xB0;
 
                 match msg {
-                    MIDI_NOTE_ON => midi_logger
+                    MIDI_NOTE_ON => log
                         .lock()
                         .unwrap()
                         .log_incoming_note(format!("NOTE ON:  {:02} {:02}", data1, data2)),
 
                     MIDI_NOTE_OFF => {}
 
-                    MIDI_CONTORL_CHANGE => midi_logger
+                    MIDI_CONTORL_CHANGE => log
                         .lock()
                         .unwrap()
                         .log_incoming_cc(format!("CC:       {:02} {:02}", data1, data2)),
 
-                    _ => midi_logger
+                    _ => log
                         .lock()
                         .unwrap()
                         .log_misc(format!("MIDI: {:02X} {:02X} {:02X}", status, data1, data2)),
@@ -104,12 +102,11 @@ pub fn midi_input_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mut
     }
 }
 
-pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mutex<Logger>>) {
+pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>) {
     let output = match midir::MidiOutput::new("uncycle_midi_output") {
         Ok(output) => output,
         Err(e) => {
-            midi_logger
-                .lock()
+            log.lock()
                 .unwrap()
                 .log_misc(format!("Failed to create MIDI output: {}", e));
             return;
@@ -119,8 +116,7 @@ pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mu
     let out_ports = output.ports();
 
     if out_ports.is_empty() {
-        midi_logger
-            .lock()
+        log.lock()
             .unwrap()
             .log_misc("No MIDI output ports available".to_string());
         return;
@@ -138,8 +134,7 @@ pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mu
     let port_name = match output.port_name(out_port) {
         Ok(name) => name,
         Err(e) => {
-            midi_logger
-                .lock()
+            log.lock()
                 .unwrap()
                 .log_misc(format!("Failed to get output port name: {}", e));
             return;
@@ -151,9 +146,9 @@ pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mu
     match conn_result {
         Ok(mut conn) => {
             {
-                let mut state = midi_logger.lock().unwrap();
-                state.port_out_name = Some(port_name.clone());
-                state.log_misc(format!("Connected to MIDI out port: {}", port_name));
+                let mut locked = log.lock().unwrap();
+                locked.port_out_name = Some(port_name.clone());
+                locked.log_misc(format!("Connected to MIDI out port: {}", port_name));
             }
 
             let start_time = Instant::now();
@@ -166,7 +161,7 @@ pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mu
                 let elapsed = start_time.elapsed().as_micros() as u64;
 
                 {
-                    bytes = midi_state.lock().unwrap().midi_tx_callback(elapsed);
+                    bytes = core.lock().unwrap().midi_tx_callback(elapsed);
                 }
 
                 // send MIDI outside of lock
@@ -178,15 +173,13 @@ pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mu
 
                 for byte in &bytes {
                     if *byte == MIDI_START {
-                        midi_logger
-                            .lock()
+                        log.lock()
                             .unwrap()
                             .log_misc(format!("Send: 0x{:02X} (MIDI Start)", MIDI_START));
                     }
 
                     if *byte == MIDI_STOP {
-                        midi_logger
-                            .lock()
+                        log.lock()
                             .unwrap()
                             .log_misc(format!("Send: 0x{:02X} (MIDI Stop)", MIDI_STOP));
                     }
@@ -195,8 +188,7 @@ pub fn midi_output_thread(midi_state: Arc<Mutex<MidiState>>, midi_logger: Arc<Mu
         }
 
         Err(e) => {
-            midi_logger
-                .lock()
+            log.lock()
                 .unwrap()
                 .log_misc(format!("Failed to connect to MIDI port: {}", e));
         }

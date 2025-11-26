@@ -17,7 +17,7 @@ use std::{
 
 use keybindings::{Action, Keybindings};
 
-use uncycle_core::MidiState;
+use uncycle_core::UncycleCore;
 
 #[derive(PartialEq)]
 enum AppTab {
@@ -30,8 +30,8 @@ enum AppTab {
 
 pub struct App {
     pub keybindings: Keybindings,
-    pub midi_state: Arc<Mutex<MidiState>>,
-    pub midi_logger: Arc<Mutex<Logger>>,
+    pub core: Arc<Mutex<UncycleCore>>,
+    pub log: Arc<Mutex<Logger>>,
     current_tab: AppTab,
     should_quit: bool,
 }
@@ -40,8 +40,8 @@ impl App {
     pub fn new() -> Self {
         Self {
             keybindings: Keybindings::new(),
-            midi_state: Arc::new(Mutex::new(MidiState::new())),
-            midi_logger: Arc::new(Mutex::new(Logger::new())),
+            core: Arc::new(Mutex::new(UncycleCore::new())),
+            log: Arc::new(Mutex::new(Logger::new())),
             current_tab: AppTab::Main,
             should_quit: false,
         }
@@ -51,24 +51,15 @@ impl App {
         if let Some(action) = self.keybindings.find_action(key) {
             match action {
                 Action::Quit => self.should_quit = true,
-                Action::IncreaseBPM => {
-                    let mut state = self.midi_state.lock().unwrap();
-                    state.increase_bpm_by(1.0);
-                }
-                Action::DecreaseBPM => {
-                    let mut state = self.midi_state.lock().unwrap();
-                    state.decrease_bpm_by(1.0);
-                }
+                Action::IncreaseBPM => self.core.lock().unwrap().increase_bpm_by(1.0),
+                Action::DecreaseBPM => self.core.lock().unwrap().decrease_bpm_by(1.0),
                 Action::CycleTabs => self.cycle_tabs(),
                 Action::RevCycleTabs => self.rev_cycle_tabs(),
-                Action::ToggleSequence => {
-                    let mut state = self.midi_state.lock().unwrap();
-                    state.start_stop_sequence();
-                }
+                Action::ToggleSequence => self.core.lock().unwrap().start_stop_sequence(),
                 Action::KillConnection => {
-                    let mut state = self.midi_state.lock().unwrap();
-                    state.kill_rx_conn = true;
-                    state.kill_tx_conn = true;
+                    let mut locked = self.core.lock().unwrap();
+                    locked.kill_rx_conn = true;
+                    locked.kill_tx_conn = true;
                 }
             }
         } else {
@@ -106,7 +97,7 @@ impl App {
 }
 
 pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
-    setup_midi_socket(app.midi_state.clone(), app.midi_logger.clone());
+    setup_midi_socket(app.core.clone(), app.log.clone());
 
     while !app.should_quit {
         terminal.draw(|f| ui(f, app))?;

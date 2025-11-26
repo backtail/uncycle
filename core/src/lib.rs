@@ -20,7 +20,7 @@ const MIDI_CONTORL_CHANGE: u8 = 0xB0;
 
 const TX_MIDI_Q_LEN: usize = 16;
 
-pub struct MidiState {
+pub struct UncycleCore {
     /// allocate space for all possible values
     active_notes: [Option<u8>; N_NOTES],
     /// allocate space for all possible values
@@ -37,7 +37,7 @@ pub struct MidiState {
     pub kill_tx_conn: bool,
 }
 
-impl MidiState {
+impl UncycleCore {
     pub fn new() -> Self {
         Self {
             active_notes: [None; N_NOTES],
@@ -113,32 +113,31 @@ impl MidiState {
 
     // timestamp is time elapsed since beginning of program start in microseconds
     pub fn midi_tx_callback(&mut self, elapsed: u64) -> Vec<u8, TX_MIDI_Q_LEN> {
-        let state = self;
         let mut tx_q = Vec::new();
 
         // MIDI Start
-        if state.start_flag {
-            state.start_flag = false;
-            state.clock_running = true;
+        if self.start_flag {
+            self.start_flag = false;
+            self.clock_running = true;
 
             tx_q.push(MIDI_START).ok();
-            state.clock_pulse_count = 0;
+            self.clock_pulse_count = 0;
         }
 
         // MIDI Stop
-        if state.stop_flag {
-            state.stop_flag = false;
-            state.clock_running = false;
+        if self.stop_flag {
+            self.stop_flag = false;
+            self.clock_running = false;
 
             tx_q.push(MIDI_STOP).ok();
         }
 
         // MIDI Clock
-        let interval = (60_000_000.0 / (state.clock_bpm * 24.0)) as u64;
+        let interval = (60_000_000.0 / (self.clock_bpm * 24.0)) as u64;
 
-        if elapsed - state.last_clock_time >= interval {
-            state.last_clock_time = elapsed;
-            state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
+        if elapsed - self.last_clock_time >= interval {
+            self.last_clock_time = elapsed;
+            self.clock_pulse_count = self.clock_pulse_count.wrapping_add(1);
 
             tx_q.push(MIDI_CLOCK).ok();
         }
