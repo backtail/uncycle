@@ -1,6 +1,6 @@
 [package]
 name = "uncycle-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "The MIDI core"
 authors = ["backtail <mail@maxgenson.de>"]
@@ -11,5 +11,5 @@ repository = "https://github.com/backtail/uncycle"
 heapless = "0.9.2"
 
 [features]
-default = ["std"]
+default = []
 std = []
