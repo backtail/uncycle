@@ -677,11 +677,9 @@ dependencies = [
 
 [[package]]
 name = "uncycle-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
- "anyhow",
  "heapless",
- "midir",
 ]
 
 [[package]]
@@ -690,6 +688,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "crossterm 0.29.0",
+ "heapless",
  "midir",
  "ratatui",
  "uncycle-core",

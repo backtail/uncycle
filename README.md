@@ -44,7 +44,7 @@ cargo run --release
 
 ## Core Library
 
-The busines logic mostly has been seperated from the TUI. Next steps include better async thread handling and `no_std` by default. At some point (hopefully) I will provide a `cbindgen` API for crosscompiling on embedded platforms with C.
+The core library has been fully switched over to `no_std` by default and further advancement will require this. At some point (hopefully) I will provide a `cbindgen` API for crosscompiling on embedded platforms with C.
 
 ## Hardware
 
@@ -54,7 +54,7 @@ The long-term plan is to run this software on dedicated hardware, i.e. a small s
 
 ```shell
 uncycle/
-├── core/   # platform-agnostic logic (not `no_std` yet)
+├── core/   # platform-agnostic logic (`#![no_std]` per default)
 ├── fw/     # (planned) firmware for embedded device
 ├── tui/    # frontend and backend for PC use
 └── vst/    # maybe, who knows

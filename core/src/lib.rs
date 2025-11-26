@@ -1,63 +1,37 @@
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
+
 pub mod devices;
 
-use anyhow::{Error, Result};
-use midir::MidiOutputConnection;
-use std::{
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use heapless::Vec;
+
+const N_NOTES: usize = 128;
+const N_CC_NUMBERS: usize = 128;
 
 const MIDI_CLOCK: u8 = 0xF8;
 const MIDI_START: u8 = 0xFA;
 const MIDI_STOP: u8 = 0xFC;
 
-// MIDI note representation
-#[derive(Clone)]
-pub struct MidiNote {
-    pub note: u8,
-    pub _velocity: u8,
-}
+const MIDI_NOTE_ON: u8 = 0x90;
+const MIDI_NOTE_OFF: u8 = 0x80;
+const MIDI_CONTORL_CHANGE: u8 = 0xB0;
 
-// MIDI CC representation
-#[derive(Clone)]
-pub struct MidiCC {
-    pub cc_num: u8,
-    pub cc_val: u8,
-}
-
-impl MidiNote {
-    fn new(note: u8, _velocity: u8) -> Self {
-        Self { note, _velocity }
-    }
-}
-
-impl MidiCC {
-    fn new(cc_num: u8, cc_val: u8) -> Self {
-        Self { cc_num, cc_val }
-    }
-}
+const TX_MIDI_Q_LEN: usize = 16;
 
 pub struct MidiState {
-    pub active_notes: Vec<MidiNote>,
-    pub last_cc: Vec<MidiCC>,
-    pub last_note: Option<MidiNote>,
-    pub error: Option<String>,
-    pub note_count: u32,
+    /// allocate space for all possible values
+    active_notes: [Option<u8>; N_NOTES],
+    /// allocate space for all possible values
+    last_cc: [Option<u8>; N_CC_NUMBERS],
 
-    // logging data for convenience
-    pub in_note_log: Vec<String>,
-    pub in_cc_log: Vec<String>,
-    pub in_other_log: Vec<String>,
-
-    pub port_in_name: Option<String>,
-    pub port_out_name: Option<String>,
-
-    pub clock_running: bool,
-    pub start_flag: bool,
-    pub stop_flag: bool,
-    pub clock_bpm: f64,
-    pub last_clock_time: Option<Instant>,
-    pub clock_pulse_count: u32,
+    clock_running: bool,
+    start_flag: bool,
+    stop_flag: bool,
+    clock_bpm: f32,
+    last_clock_time: u64, // in microseconds
+    clock_pulse_count: u32,
 
     pub kill_rx_conn: bool,
     pub kill_tx_conn: bool,
@@ -66,24 +40,14 @@ pub struct MidiState {
 impl MidiState {
     pub fn new() -> Self {
         Self {
-            active_notes: Vec::new(),
-            last_cc: Vec::new(),
-            last_note: None,
-            error: None,
-            note_count: 0,
-
-            in_note_log: Vec::new(),
-            in_cc_log: Vec::new(),
-            in_other_log: Vec::new(),
-
-            port_in_name: None,
-            port_out_name: None,
+            active_notes: [None; N_NOTES],
+            last_cc: [None; N_CC_NUMBERS],
 
             clock_running: false,
             start_flag: false,
             stop_flag: false,
             clock_bpm: 120.0,
-            last_clock_time: None,
+            last_clock_time: 0,
             clock_pulse_count: 0,
 
             kill_rx_conn: false,
@@ -91,63 +55,27 @@ impl MidiState {
         }
     }
 
-    pub fn add_note(&mut self, note: u8, velocity: u8) {
-        let midi_note = MidiNote::new(note, velocity);
-        self.active_notes.push(midi_note.clone());
-        self.last_note = Some(midi_note);
-        self.note_count += 1;
+    pub fn update_note(&mut self, note: u8, velocity: u8) {
+        self.active_notes[note as usize] = Some(velocity);
     }
 
     pub fn update_cc(&mut self, cc_num: u8, cc_val: u8) {
-        if let Some(old) = self.last_cc.iter_mut().find(|n| n.cc_num == cc_num) {
-            old.cc_val = cc_val
-        } else {
-            self.last_cc.push(MidiCC::new(cc_num, cc_val));
-        }
+        self.last_cc[cc_num as usize] = Some(cc_val);
     }
 
     pub fn remove_note(&mut self, note: u8) {
-        self.active_notes.retain(|n| n.note != note);
+        self.active_notes[note as usize] = None;
     }
 
     pub fn find_active_note(&mut self, note: u8) -> bool {
-        self.active_notes.iter().find(|n| n.note == note).is_some()
+        self.active_notes[note as usize].is_some()
     }
 
     pub fn get_cc_val_of(&mut self, cc_num: u8) -> u8 {
-        if let Some(exists) = self.last_cc.iter().find(|n| n.cc_num == cc_num) {
-            exists.cc_val
-        } else {
-            0
-        }
+        self.last_cc[cc_num as usize].unwrap_or(0)
     }
 
-    pub fn set_error(&mut self, error: String) {
-        self.error = Some(error);
-    }
-
-    pub fn log_incoming_note(&mut self, message: String) {
-        self.in_note_log.push(message);
-        if self.in_note_log.len() > 200 {
-            self.in_note_log.remove(0);
-        }
-    }
-
-    pub fn log_incoming_cc(&mut self, message: String) {
-        self.in_cc_log.push(message);
-        if self.in_cc_log.len() > 200 {
-            self.in_cc_log.remove(0);
-        }
-    }
-
-    pub fn log_misc(&mut self, message: String) {
-        self.in_other_log.push(message);
-        if self.in_other_log.len() > 200 {
-            self.in_other_log.remove(0);
-        }
-    }
-
-    pub fn increase_bpm_by(&mut self, amount: f64) {
+    pub fn increase_bpm_by(&mut self, amount: f32) {
         self.clock_bpm += amount;
 
         if self.clock_bpm >= 200.0 {
@@ -155,7 +83,7 @@ impl MidiState {
         }
     }
 
-    pub fn decrease_bpm_by(&mut self, amount: f64) {
+    pub fn decrease_bpm_by(&mut self, amount: f32) {
         self.clock_bpm -= amount;
 
         if self.clock_bpm <= 40.0 {
@@ -178,94 +106,94 @@ impl MidiState {
             0
         }
     }
+
+    pub fn get_bpm(&self) -> f32 {
+        self.clock_bpm
+    }
+
+    // timestamp is time elapsed since beginning of program start in microseconds
+    pub fn midi_tx_callback(&mut self, elapsed: u64) -> Vec<u8, TX_MIDI_Q_LEN> {
+        let state = self;
+        let mut tx_q = Vec::new();
+
+        // MIDI Start
+        if state.start_flag {
+            state.start_flag = false;
+            state.clock_running = true;
+
+            tx_q.push(MIDI_START).ok();
+            state.clock_pulse_count = 0;
+        }
+
+        // MIDI Stop
+        if state.stop_flag {
+            state.stop_flag = false;
+            state.clock_running = false;
+
+            tx_q.push(MIDI_STOP).ok();
+        }
+
+        // MIDI Clock
+        let interval = (60_000_000.0 / (state.clock_bpm * 24.0)) as u64;
+
+        if elapsed - state.last_clock_time >= interval {
+            state.last_clock_time = elapsed;
+            state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
+
+            tx_q.push(MIDI_CLOCK).ok();
+        }
+
+        tx_q
+    }
+
+    pub fn midi_rx_callback(&mut self, message: &[u8]) {
+        if let Some(msg) = parse_midi_message(message) {
+            let _status = message[0];
+            let data1 = message[1];
+            let data2 = message[2];
+
+            match msg {
+                MIDI_NOTE_ON => self.update_note(data1, data2),
+                MIDI_NOTE_OFF => self.remove_note(data1),
+                MIDI_CONTORL_CHANGE => self.update_cc(data1, data2),
+                _ => {}
+            }
+        }
+    }
 }
 
-// is executed in dedicated thread
-pub fn midi_rx_callback(midi_state: &Arc<Mutex<MidiState>>, message: &[u8]) -> Result<()> {
-    if message.len() >= 3 {
-        let status = message[0];
-        let data1 = message[1];
-        let data2 = message[2];
+pub fn parse_midi_message(msg: &[u8]) -> Option<u8> {
+    let mut result = None;
+
+    if msg.len() >= 3 {
+        let status = msg[0];
+        let _data1 = msg[1];
+        let data2 = msg[2];
 
         let message_type = status & 0xF0;
-        let mut state = midi_state.lock().unwrap();
 
         match message_type {
-            0x90 => {
+            MIDI_NOTE_ON => {
                 // Note On
                 if data2 > 0 {
-                    state.add_note(data1, data2);
-                    state.log_incoming_note(format!("NOTE ON:  {:02} {:02}", data1, data2));
+                    result = Some(MIDI_NOTE_ON);
                 } else {
-                    state.remove_note(data1);
-                    state.log_incoming_note(format!("NOTE OFF: {:02}", data1));
+                    result = Some(MIDI_NOTE_OFF);
                 }
             }
 
-            0x80 => {
+            MIDI_NOTE_OFF => {
                 // Note Off
-                state.remove_note(data1);
-                state.log_incoming_note(format!("NOTE OFF: {:02}", data1));
+                result = Some(MIDI_NOTE_OFF);
             }
 
-            0xB0 => {
-                // Control Change
-                state.update_cc(data1, data2);
-                state.log_incoming_cc(format!("CC:       {:02} {:02}", data1, data2));
+            MIDI_CONTORL_CHANGE => {
+                result = Some(MIDI_CONTORL_CHANGE);
             }
 
-            _ => {
-                state.log_misc(format!("MIDI: {:02X} {:02X} {:02X}", status, data1, data2));
-            }
+            _ => {}
         }
     }
-    Ok(())
-}
 
-// is executed in dedicated thread
-pub fn midi_tx_callback(
-    midi_state: &Arc<Mutex<MidiState>>,
-    conn: &mut MidiOutputConnection,
-) -> Result<()> {
-    let mut state = midi_state.lock().unwrap();
-
-    // MIDI Start
-    if state.start_flag {
-        state.start_flag = false;
-        state.clock_running = true;
-
-        conn.send(&[MIDI_START]).unwrap();
-        state.clock_pulse_count = 0;
-        state.log_misc(format!("Send: 0x{:02X} (MIDI Start)", MIDI_START));
-    }
-
-    // MIDI Stop
-    if state.stop_flag {
-        state.stop_flag = false;
-        state.clock_running = false;
-
-        conn.send(&[MIDI_STOP]).unwrap();
-        state.log_misc(format!("Send: 0x{:02X} (MIDI Stop)", MIDI_STOP));
-    }
-
-    // MIDI Clock
-    if let Some(last_time) = state.last_clock_time {
-        let interval = Duration::from_micros((60_000_000.0 / (state.clock_bpm * 24.0)) as u64);
-
-        if last_time.elapsed() >= interval {
-            conn.send(&[MIDI_CLOCK]).unwrap();
-
-            state.last_clock_time = Some(Instant::now());
-            state.clock_pulse_count = state.clock_pulse_count.wrapping_add(1);
-        }
-    } else {
-        state.last_clock_time = Some(Instant::now());
-    }
-
-    if !state.kill_tx_conn {
-        state.kill_tx_conn = false;
-        Ok(())
-    } else {
-        Err(Error::msg("MIDI TX connection killed"))
-    }
+    result
 }
