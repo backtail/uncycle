@@ -38,23 +38,23 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     let mut current_param_2nd: [u8; TR_8_PARAM_ELEMS] = [0_u8; TR_8_PARAM_ELEMS];
 
     {
-        let mut midi_state = app.midi_state.lock().unwrap();
+        let mut core = app.core.lock().unwrap();
 
         for i in 0..(TR_8_STEPS - 1) {
             match i {
                 0..TR_8_INTRUMENTS => {
-                    current_volume[i] = midi_state.get_cc_val_of(TR_8_CC_FADER[i].0);
-                    current_active_steps[i] = midi_state.find_active_note(TR_8_NOTES[i]);
-                    current_param_1st[i] = midi_state.get_cc_val_of(TR_8_CC_PARAMS_1ST_ROW[i].0);
-                    current_param_2nd[i] = midi_state.get_cc_val_of(TR_8_CC_PARAMS_2ND_ROW[i].0);
+                    current_volume[i] = core.get_cc_val_of(TR_8_CC_FADER[i].0);
+                    current_active_steps[i] = core.find_active_note(TR_8_NOTES[i]);
+                    current_param_1st[i] = core.get_cc_val_of(TR_8_CC_PARAMS_1ST_ROW[i].0);
+                    current_param_2nd[i] = core.get_cc_val_of(TR_8_CC_PARAMS_2ND_ROW[i].0);
                 }
                 TR_8_INTRUMENTS..TR_8_PARAM_ELEMS => {
-                    current_active_steps[i] = midi_state.find_active_note(TR_8_NOTES[i]);
-                    current_param_1st[i] = midi_state.get_cc_val_of(TR_8_CC_PARAMS_1ST_ROW[i].0);
-                    current_param_2nd[i] = midi_state.get_cc_val_of(TR_8_CC_PARAMS_2ND_ROW[i].0);
+                    current_active_steps[i] = core.find_active_note(TR_8_NOTES[i]);
+                    current_param_1st[i] = core.get_cc_val_of(TR_8_CC_PARAMS_1ST_ROW[i].0);
+                    current_param_2nd[i] = core.get_cc_val_of(TR_8_CC_PARAMS_2ND_ROW[i].0);
                 }
                 TR_8_PARAM_ELEMS..TR_8_STEPS => {
-                    current_active_steps[i] = midi_state.find_active_note(TR_8_NOTES[i]);
+                    current_active_steps[i] = core.find_active_note(TR_8_NOTES[i]);
                 }
                 _ => {}
             }

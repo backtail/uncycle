@@ -12,10 +12,10 @@ use app::App;
 pub fn render_main_tab(f: &mut Frame, app: &App, area: Rect) {
     let status_text;
     {
-        let mut state = app.midi_state.lock().unwrap();
+        let mut locked = app.core.lock().unwrap();
         status_text = vec![
-            Line::from(format!("BPM: {}", state.get_bpm())),
-            Line::from(format!("Step: {}", state.get_step_number() + 1)),
+            Line::from(format!("BPM: {}", locked.get_bpm())),
+            Line::from(format!("Step: {}", locked.get_step_number() + 1)),
         ];
     }
 

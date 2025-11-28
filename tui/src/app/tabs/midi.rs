@@ -13,13 +13,13 @@ use app::App;
 pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Ratio(1, 2); 3])
+        .constraints([Constraint::Ratio(1, 4); 4])
         .split(area);
 
-    let logger = app.midi_logger.lock().unwrap();
+    let log = app.log.lock().unwrap();
 
     // Message log
-    let incoming_notes: Vec<ListItem> = logger
+    let incoming_notes: Vec<ListItem> = log
         .in_note_log
         .iter()
         .rev() // Show newest first
@@ -27,7 +27,7 @@ pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
         .map(|msg| ListItem::new(Line::from(msg.as_str())))
         .collect();
 
-    let incoming_cc: Vec<ListItem> = logger
+    let incoming_cc: Vec<ListItem> = log
         .in_cc_log
         .iter()
         .rev() // Show newest first
@@ -35,7 +35,7 @@ pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
         .map(|msg| ListItem::new(Line::from(msg.as_str())))
         .collect();
 
-    let misc: Vec<ListItem> = logger
+    let misc: Vec<ListItem> = log
         .in_other_log
         .iter()
         .rev() // Show newest first
@@ -43,24 +43,41 @@ pub fn render_midi_tab(f: &mut Frame, app: &App, area: Rect) {
         .map(|msg| ListItem::new(Line::from(msg.as_str())))
         .collect();
 
-    let log_block = Block::default().title("Note Log").borders(Borders::ALL);
+    let outgoing_cc: Vec<ListItem> = log
+        .out_cc_log
+        .iter()
+        .rev() // Show newest first
+        .take(200) // Limit to 200 items
+        .map(|msg| ListItem::new(Line::from(msg.as_str())))
+        .collect();
+
+    let log_block = Block::default()
+        .title("Incoming Notes")
+        .borders(Borders::ALL);
     let log = List::new(incoming_notes)
         .block(log_block)
         .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().fg(Color::Yellow));
     f.render_widget(log, chunks[0]);
 
-    let log_block = Block::default().title("CC Log").borders(Borders::ALL);
+    let log_block = Block::default().title("Incoming CC").borders(Borders::ALL);
     let log = List::new(incoming_cc)
         .block(log_block)
         .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().fg(Color::Yellow));
     f.render_widget(log, chunks[1]);
 
-    let log_block = Block::default().title("Misc").borders(Borders::ALL);
-    let log = List::new(misc)
+    let log_block = Block::default().title("Outgoing CC").borders(Borders::ALL);
+    let log = List::new(outgoing_cc)
         .block(log_block)
         .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().fg(Color::Yellow));
     f.render_widget(log, chunks[2]);
+
+    let log_block = Block::default().title("General").borders(Borders::ALL);
+    let log = List::new(misc)
+        .block(log_block)
+        .style(Style::default().fg(Color::White))
+        .highlight_style(Style::default().fg(Color::Yellow));
+    f.render_widget(log, chunks[3]);
 }
