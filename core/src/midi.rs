@@ -3,11 +3,14 @@ pub const N_CC_NUMBERS: usize = 128;
 
 pub const MIDI_CLOCK: u8 = 0xF8;
 pub const MIDI_START: u8 = 0xFA;
+pub const MIDI_CONTINUE: u8 = 0xFB;
 pub const MIDI_STOP: u8 = 0xFC;
 
 pub const MIDI_NOTE_ON: u8 = 0x90;
 pub const MIDI_NOTE_OFF: u8 = 0x80;
 pub const MIDI_CONTORL_CHANGE: u8 = 0xB0;
+
+pub type MidiMsg = [u8; 3];
 
 pub fn parse_midi_message(msg: &[u8]) -> Option<u8> {
     let mut result = None;

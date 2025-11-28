@@ -1,4 +1,4 @@
-use super::midi::*;
+use super::{looper::Looper, midi::*};
 use heapless::Vec;
 
 const TX_MIDI_Q_LEN: usize = 16;
@@ -8,6 +8,8 @@ pub struct UncycleCore {
     active_notes: [Option<u8>; N_NOTES],
     /// allocate space for all possible values
     last_cc: [Option<u8>; N_CC_NUMBERS],
+
+    looper: Looper,
 
     clock_running: bool,
     start_flag: bool,
@@ -25,6 +27,8 @@ impl UncycleCore {
         Self {
             active_notes: [None; N_NOTES],
             last_cc: [None; N_CC_NUMBERS],
+
+            looper: Looper::new(),
 
             clock_running: false,
             start_flag: false,
@@ -94,9 +98,48 @@ impl UncycleCore {
         self.clock_bpm
     }
 
-    // timestamp is time elapsed since beginning of program start in microseconds
-    pub fn midi_tx_callback(&mut self, elapsed: u64) -> Vec<u8, TX_MIDI_Q_LEN> {
+    pub fn start_recording(&mut self) {
+        self.looper.start_recording();
+    }
+
+    fn handle_looper_playback(&mut self, now: u64, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
+        let mut playback = self.looper.play_back_recording(now);
+
+        if !playback.is_empty() {
+            let bytes = &playback.pop().unwrap();
+
+            for byte in bytes {
+                tx_q.push(*byte).ok();
+            }
+
+            self.last_cc[bytes[1] as usize] = Some(bytes[2]);
+        }
+    }
+
+    /// `now` is time elapsed since beginning of program start in microseconds
+    pub fn midi_rx_callback(&mut self, now: u64, message: &[u8]) {
+        if let Some(in_type) = parse_midi_message(message) {
+            let bytes = [message[0], message[1], message[2]];
+
+            match in_type {
+                MIDI_NOTE_ON => self.update_note(bytes[1], bytes[2]),
+                MIDI_NOTE_OFF => self.remove_note(bytes[1]),
+                MIDI_CONTORL_CHANGE => {
+                    self.update_cc(bytes[1], bytes[2]);
+                    self.looper.record_cc(now, &bytes);
+                }
+                _ => {}
+            };
+        }
+    }
+
+    /// `now` is time elapsed since beginning of program start in microseconds
+    pub fn midi_tx_callback(&mut self, now: u64) -> Vec<u8, TX_MIDI_Q_LEN> {
         let mut tx_q = Vec::new();
+
+        if self.looper.check_if_started(now) {
+            tx_q.push(MIDI_START).ok();
+        }
 
         // MIDI Start
         if self.start_flag {
@@ -118,28 +161,17 @@ impl UncycleCore {
         // MIDI Clock
         let interval = (60_000_000.0 / (self.clock_bpm * 24.0)) as u64;
 
-        if elapsed - self.last_clock_time >= interval {
-            self.last_clock_time = elapsed;
+        if now - self.last_clock_time >= interval {
+            self.last_clock_time = now;
             self.clock_pulse_count = self.clock_pulse_count.wrapping_add(1);
+
+            self.looper.handle_timing(now);
 
             tx_q.push(MIDI_CLOCK).ok();
         }
 
+        self.handle_looper_playback(now, &mut tx_q);
+
         tx_q
-    }
-
-    pub fn midi_rx_callback(&mut self, message: &[u8]) {
-        if let Some(msg) = parse_midi_message(message) {
-            let _status = message[0];
-            let data1 = message[1];
-            let data2 = message[2];
-
-            match msg {
-                MIDI_NOTE_ON => self.update_note(data1, data2),
-                MIDI_NOTE_OFF => self.remove_note(data1),
-                MIDI_CONTORL_CHANGE => self.update_cc(data1, data2),
-                _ => {}
-            }
-        }
     }
 }

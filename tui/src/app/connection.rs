@@ -12,16 +12,18 @@ pub fn setup_midi_socket(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>)
     let core_arc_clone = Arc::clone(&core);
     let log_arc_clone = Arc::clone(&log);
 
+    let now = Instant::now();
+
     thread::spawn(move || {
-        midi_input_thread(core, log);
+        midi_input_thread(core, log, now);
     });
 
     thread::spawn(move || {
-        midi_output_thread(core_arc_clone, log_arc_clone);
+        midi_output_thread(core_arc_clone, log_arc_clone, now);
     });
 }
 
-pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>) {
+pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>, now: Instant) {
     let input = match midir::MidiInput::new("uncycle_midi_input") {
         Ok(input) => input,
         Err(e) => {
@@ -58,17 +60,14 @@ pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>)
         "uncycle-midi-in",
         move |_timestamp, message, _| {
             // first handle midi logic
-            core.lock().unwrap().midi_rx_callback(message);
+            let elapsed = now.elapsed().as_micros() as u64;
+            core.lock().unwrap().midi_rx_callback(elapsed, message);
 
             // then handle logging
             if let Some(msg) = parse_midi_message(message) {
                 let status = message[0];
                 let data1 = message[1];
                 let data2 = message[2];
-
-                const MIDI_NOTE_ON: u8 = 0x90;
-                const MIDI_NOTE_OFF: u8 = 0x80;
-                const MIDI_CONTORL_CHANGE: u8 = 0xB0;
 
                 match msg {
                     MIDI_NOTE_ON => log
@@ -78,10 +77,13 @@ pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>)
 
                     MIDI_NOTE_OFF => {}
 
-                    MIDI_CONTORL_CHANGE => log
-                        .lock()
-                        .unwrap()
-                        .log_incoming_cc(format!("CC:       {:02} {:02}", data1, data2)),
+                    MIDI_CONTORL_CHANGE => log.lock().unwrap().log_incoming_cc(format!(
+                        "[{} ms {:3} ns] {} {}",
+                        now.elapsed().as_micros() / 1000,
+                        now.elapsed().as_micros() % 1000,
+                        data1,
+                        data2,
+                    )),
 
                     _ => log
                         .lock()
@@ -102,7 +104,7 @@ pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>)
     }
 }
 
-pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>) {
+pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>, now: Instant) {
     let output = match midir::MidiOutput::new("uncycle_midi_output") {
         Ok(output) => output,
         Err(e) => {
@@ -151,14 +153,12 @@ pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>
                 locked.log_misc(format!("Connected to MIDI out port: {}", port_name));
             }
 
-            let start_time = Instant::now();
-
             loop {
                 // poll @ 1kHz, thread timing accuracy does not matter since we pass time as paramter to callback
                 thread::sleep(Duration::from_millis(1));
 
                 let bytes;
-                let elapsed = start_time.elapsed().as_micros() as u64;
+                let elapsed = now.elapsed().as_micros() as u64;
 
                 {
                     bytes = core.lock().unwrap().midi_tx_callback(elapsed);
@@ -168,8 +168,6 @@ pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>
                 conn.send(&bytes).ok();
 
                 // log after sending
-                const MIDI_START: u8 = 0xFA;
-                const MIDI_STOP: u8 = 0xFC;
 
                 for byte in &bytes {
                     if *byte == MIDI_START {
@@ -178,10 +176,24 @@ pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>
                             .log_misc(format!("Send: 0x{:02X} (MIDI Start)", MIDI_START));
                     }
 
+                    if *byte == MIDI_CONTINUE {
+                        log.lock()
+                            .unwrap()
+                            .log_misc(format!("Send: 0x{:02X} (MIDI Continue)", MIDI_CONTINUE));
+                    }
+
                     if *byte == MIDI_STOP {
                         log.lock()
                             .unwrap()
                             .log_misc(format!("Send: 0x{:02X} (MIDI Stop)", MIDI_STOP));
+                    }
+
+                    if (*byte) & 0xF0 == MIDI_CONTORL_CHANGE {
+                        log.lock().unwrap().log_outgoing_cc(format!(
+                            "[{} ms {:3} ns] CC",
+                            now.elapsed().as_micros() / 1000,
+                            now.elapsed().as_micros() % 1000,
+                        ));
                     }
                 }
             }

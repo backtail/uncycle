@@ -61,6 +61,7 @@ impl App {
                     locked.kill_rx_conn = true;
                     locked.kill_tx_conn = true;
                 }
+                Action::StartRecording => self.core.lock().unwrap().start_recording(),
             }
         } else {
             // Handle tab switching

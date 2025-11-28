@@ -6,9 +6,10 @@ extern crate std;
 pub mod devices;
 
 mod core;
+mod looper;
 mod midi;
 
 pub mod prelude {
     pub use crate::core::UncycleCore;
-    pub use crate::midi::parse_midi_message;
+    pub use crate::midi::*;
 }

@@ -16,6 +16,7 @@ pub enum Action {
     RevCycleTabs,
     ToggleSequence,
     KillConnection,
+    StartRecording,
 }
 
 pub struct Keybindings {
@@ -64,6 +65,11 @@ impl Keybindings {
                 key: KeyCode::Esc,
                 description: "Kill MIDI connection",
                 action: Action::KillConnection,
+            },
+            KeyAction {
+                key: KeyCode::Enter,
+                description: "Start recording",
+                action: Action::StartRecording,
             },
         ];
 
