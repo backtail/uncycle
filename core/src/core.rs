@@ -102,6 +102,10 @@ impl UncycleCore {
         self.looper.start_recording();
     }
 
+    pub fn delete_recording(&mut self) {
+        self.looper.delete_recording();
+    }
+
     fn handle_looper_playback(&mut self, now: u64, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
         for bytes in self.looper.play_back_recording(now) {
             for byte in bytes {

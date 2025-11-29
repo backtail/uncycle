@@ -62,6 +62,7 @@ impl App {
                     locked.kill_tx_conn = true;
                 }
                 Action::StartRecording => self.core.lock().unwrap().start_recording(),
+                Action::DeleteRecording => self.core.lock().unwrap().delete_recording(),
             }
         } else {
             // Handle tab switching

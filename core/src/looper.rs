@@ -40,6 +40,14 @@ impl Looper {
         self.recording_ongoing = true;
     }
 
+    pub fn delete_recording(&mut self) {
+        self.recorded_cc.clear();
+        self.recording_ongoing = false;
+        self.recording_started = None;
+        self.recording_clock_tick_counter = 0;
+        self.recorded_loop_length = None;
+    }
+
     pub fn check_if_started(&mut self, now: u64) -> bool {
         if self.recording_ongoing && self.recording_started.is_none() {
             self.recording_started = Some(now);
