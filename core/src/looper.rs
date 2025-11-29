@@ -1,4 +1,4 @@
-use crate::midi::MidiMsg;
+use crate::midi::{MidiMsg, N_CC_NUMBERS};
 
 use heapless::Vec;
 
@@ -9,7 +9,11 @@ pub struct RecordedMidiMsg {
 }
 
 pub struct Looper {
-    pub current_loop_cc: Vec<RecordedMidiMsg, 1024>,
+    /// statically allocated buffer for 128 possible CC messages
+    playback_buffer: Vec<MidiMsg, N_CC_NUMBERS>,
+
+    time_last_checked: u64,
+
     pub recorded_cc: Vec<RecordedMidiMsg, 1024>,
     pub recording_ongoing: bool,
     pub recording_started: Option<u64>,
@@ -20,7 +24,10 @@ pub struct Looper {
 impl Looper {
     pub fn new() -> Self {
         Self {
-            current_loop_cc: Vec::new(),
+            playback_buffer: Vec::new(),
+
+            time_last_checked: 0,
+
             recorded_cc: Vec::new(),
             recording_ongoing: false,
             recording_started: None,
@@ -63,7 +70,7 @@ impl Looper {
             self.recording_clock_tick_counter += 1;
 
             if self.recording_ongoing {
-                if self.recording_clock_tick_counter >= (16 / 4) * 24 {
+                if self.recording_clock_tick_counter > (16 / 4) * 24 {
                     self.recording_ongoing = false;
                     self.recorded_loop_length =
                         Some((now - self.recording_started.unwrap()) as u32);
@@ -72,27 +79,41 @@ impl Looper {
 
             // end of loop
             if self.recording_clock_tick_counter % (16 / 4) * 24 == 0 {
-                for cc in &self.recorded_cc {
-                    self.current_loop_cc.push(*cc).ok();
-                }
+                // signal end of loop
             }
         }
     }
 
-    pub fn play_back_recording(&mut self, now: u64) -> Vec<MidiMsg, 1> {
-        let mut result = Vec::new();
-        if let Some(loop_time) = self.recorded_loop_length {
-            self.current_loop_cc.retain(|cc| {
-                if cc.time as u64 <= (now - self.recording_started.unwrap()) % loop_time as u64 {
-                    result.push(cc.msg).ok();
+    /// Returns a heapless vector with pre-allocated 128 possible items of type `MidiMsg`, since it only returns the
+    /// lastest event in the relevant time frame from each CC number. This tries to limit the bandwith
+    /// of dubbed recordings and also acts as the worst case scenario.
+    pub fn play_back_recording(&mut self, now: u64) -> &Vec<MidiMsg, N_CC_NUMBERS> {
+        self.playback_buffer.clear();
 
-                    false
-                } else {
-                    true
+        if let Some(loop_time) = self.recorded_loop_length {
+            self.recorded_cc.iter().for_each(|cc| {
+                let rec_start = self.recording_started.unwrap();
+
+                if is_in_time_frame(
+                    cc.time,
+                    self.time_last_checked - rec_start,
+                    now - rec_start,
+                    loop_time,
+                ) {
+                    self.playback_buffer
+                        .push(cc.msg) // add this recorded event
+                        .ok(); // if vec is full, drop it
                 }
             });
         }
 
-        result
+        self.time_last_checked = now;
+
+        &self.playback_buffer
     }
+}
+
+fn is_in_time_frame(check: u32, frame_begin: u64, frame_end: u64, loop_len: u32) -> bool {
+    check >= (frame_begin % loop_len as u64) as u32 // lower bound
+    && check <= (frame_end % loop_len as u64) as u32 // upper bound
 }

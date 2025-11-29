@@ -103,11 +103,7 @@ impl UncycleCore {
     }
 
     fn handle_looper_playback(&mut self, now: u64, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
-        let mut playback = self.looper.play_back_recording(now);
-
-        if !playback.is_empty() {
-            let bytes = &playback.pop().unwrap();
-
+        for bytes in self.looper.play_back_recording(now) {
             for byte in bytes {
                 tx_q.push(*byte).ok();
             }
@@ -119,7 +115,7 @@ impl UncycleCore {
     /// `now` is time elapsed since beginning of program start in microseconds
     pub fn midi_rx_callback(&mut self, now: u64, message: &[u8]) {
         if let Some(in_type) = parse_midi_message(message) {
-            let bytes = [message[0], message[1], message[2]];
+            let bytes: MidiMsg = [message[0], message[1], message[2]];
 
             match in_type {
                 MIDI_NOTE_ON => self.update_note(bytes[1], bytes[2]),
