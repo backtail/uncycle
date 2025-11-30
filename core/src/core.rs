@@ -98,16 +98,29 @@ impl UncycleCore {
         self.clock_bpm
     }
 
+    /// Returns `n_steps` time for current bpm in µs
+    ///
+    /// BPM stands for *Beat per Minute* or more accurately **Quarter Note per Minute**
+    /// - time per quarter note: 60 s / `clock_bpm`
+    /// - `n_steps` are in sixteenths
+    fn bpm_to_us(&self, n_steps: u16) -> u32 {
+        assert!(self.clock_bpm != 0.0);
+
+        let quarter_note = 60.0 / self.clock_bpm; // in s
+
+        (n_steps as f32 * (quarter_note / 4.0) * 10E5) as u32 // in µs
+    }
+
     pub fn start_recording(&mut self) {
-        self.looper.start_recording();
+        self.looper.start_recording(self.bpm_to_us(16));
+    }
+
+    pub fn delete_recording(&mut self) {
+        self.looper.delete_recording();
     }
 
     fn handle_looper_playback(&mut self, now: u64, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
-        let mut playback = self.looper.play_back_recording(now);
-
-        if !playback.is_empty() {
-            let bytes = &playback.pop().unwrap();
-
+        for bytes in self.looper.play_back_recording(now) {
             for byte in bytes {
                 tx_q.push(*byte).ok();
             }
@@ -119,7 +132,7 @@ impl UncycleCore {
     /// `now` is time elapsed since beginning of program start in microseconds
     pub fn midi_rx_callback(&mut self, now: u64, message: &[u8]) {
         if let Some(in_type) = parse_midi_message(message) {
-            let bytes = [message[0], message[1], message[2]];
+            let bytes: MidiMsg = [message[0], message[1], message[2]];
 
             match in_type {
                 MIDI_NOTE_ON => self.update_note(bytes[1], bytes[2]),
@@ -140,6 +153,8 @@ impl UncycleCore {
         if self.looper.check_if_started(now) {
             tx_q.push(MIDI_START).ok();
         }
+
+        self.looper.check_if_overdub_started(now);
 
         // MIDI Start
         if self.start_flag {

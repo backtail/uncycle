@@ -1,4 +1,4 @@
-use crate::midi::MidiMsg;
+use crate::midi::{MidiMsg, N_CC_NUMBERS};
 
 use heapless::Vec;
 
@@ -9,33 +9,65 @@ pub struct RecordedMidiMsg {
 }
 
 pub struct Looper {
-    pub current_loop_cc: Vec<RecordedMidiMsg, 1024>,
-    pub recorded_cc: Vec<RecordedMidiMsg, 1024>,
-    pub recording_ongoing: bool,
-    pub recording_started: Option<u64>,
-    pub recording_clock_tick_counter: u16,
-    pub recorded_loop_length: Option<u32>,
+    /// statically allocated buffer for 128 possible CC messages
+    playback_buffer: Vec<MidiMsg, N_CC_NUMBERS>,
+
+    time_last_checked: u64,
+
+    recorded_cc: Vec<RecordedMidiMsg, 1024>,
+    record: bool,
+    rec_start: Option<u64>,
+    loop_len: Option<u32>,
+
+    overdub: bool,
+    overdub_start: Option<u64>,
 }
 
 impl Looper {
     pub fn new() -> Self {
         Self {
-            current_loop_cc: Vec::new(),
+            playback_buffer: Vec::new(),
+
+            time_last_checked: 0,
+
             recorded_cc: Vec::new(),
-            recording_ongoing: false,
-            recording_started: None,
-            recording_clock_tick_counter: 0,
-            recorded_loop_length: None,
+            record: false,
+            rec_start: None,
+            loop_len: None,
+
+            overdub: false,
+            overdub_start: None,
         }
     }
 
-    pub fn start_recording(&mut self) {
-        self.recording_ongoing = true;
+    /// Engage in recording CC messages by providing a non-zero `loop_len` in µs
+    pub fn start_recording(&mut self, loop_len: u32) {
+        assert!(loop_len != 0);
+
+        if !self.record {
+            if self.rec_start.is_none() {
+                self.record = true;
+                self.loop_len = Some(loop_len);
+            } else {
+                if !self.overdub {
+                    self.overdub = true;
+                }
+            }
+        }
+    }
+
+    pub fn delete_recording(&mut self) {
+        self.recorded_cc.clear();
+        self.record = false;
+        self.rec_start = None;
+        self.loop_len = None;
+        self.overdub = false;
+        self.overdub_start = None;
     }
 
     pub fn check_if_started(&mut self, now: u64) -> bool {
-        if self.recording_ongoing && self.recording_started.is_none() {
-            self.recording_started = Some(now);
+        if self.record && self.rec_start.is_none() {
+            self.rec_start = Some(now);
 
             true
         } else {
@@ -43,10 +75,27 @@ impl Looper {
         }
     }
 
+    pub fn check_if_overdub_started(&mut self, now: u64) {
+        if self.overdub && self.overdub_start.is_none() {
+            self.overdub_start = Some(now);
+        }
+    }
+
     /// Must be called for every incoming CC message
     pub fn record_cc(&mut self, now: u64, cc_msg: &MidiMsg) {
-        if self.recording_ongoing {
-            if let Some(start_time) = self.recording_started {
+        if self.record {
+            if let Some(start_time) = self.rec_start {
+                self.recorded_cc
+                    .push(RecordedMidiMsg {
+                        msg: *cc_msg,
+                        time: (now - start_time) as u32,
+                    })
+                    .ok();
+            }
+        }
+
+        if self.overdub {
+            if let Some(start_time) = self.overdub_start {
                 self.recorded_cc
                     .push(RecordedMidiMsg {
                         msg: *cc_msg,
@@ -59,40 +108,60 @@ impl Looper {
 
     /// Must be called for MIDI clock tick
     pub fn handle_timing(&mut self, now: u64) {
-        if self.recording_started.is_some() {
-            self.recording_clock_tick_counter += 1;
-
-            if self.recording_ongoing {
-                if self.recording_clock_tick_counter >= (16 / 4) * 24 {
-                    self.recording_ongoing = false;
-                    self.recorded_loop_length =
-                        Some((now - self.recording_started.unwrap()) as u32);
+        if let Some(start) = self.rec_start {
+            if self.record {
+                if let Some(len) = self.loop_len {
+                    if (now - start) as u32 >= len {
+                        self.record = false;
+                    }
                 }
             }
+        }
 
-            // end of loop
-            if self.recording_clock_tick_counter % (16 / 4) * 24 == 0 {
-                for cc in &self.recorded_cc {
-                    self.current_loop_cc.push(*cc).ok();
+        if let Some(start) = self.overdub_start {
+            if self.overdub {
+                if let Some(len) = self.loop_len {
+                    if (now - start) as u32 >= len {
+                        self.overdub = false;
+                        self.overdub_start = None;
+                    }
                 }
             }
         }
     }
 
-    pub fn play_back_recording(&mut self, now: u64) -> Vec<MidiMsg, 1> {
-        let mut result = Vec::new();
-        if let Some(loop_time) = self.recorded_loop_length {
-            self.current_loop_cc.retain(|cc| {
-                if cc.time as u64 <= (now - self.recording_started.unwrap()) % loop_time as u64 {
-                    result.push(cc.msg).ok();
+    /// Returns a heapless vector with pre-allocated 128 possible items of type `MidiMsg`, since it only returns the
+    /// lastest event in the relevant time frame from each CC number. This tries to limit the bandwith
+    /// of dubbed recordings and also acts as the worst case scenario.
+    pub fn play_back_recording(&mut self, now: u64) -> &Vec<MidiMsg, N_CC_NUMBERS> {
+        self.playback_buffer.clear();
 
-                    false
-                } else {
-                    true
+        if !self.record {
+            if let Some(loop_time) = self.loop_len {
+                if let Some(start) = self.rec_start {
+                    self.recorded_cc.iter().for_each(|cc| {
+                        if is_in_time_frame(
+                            cc.time,
+                            self.time_last_checked - start,
+                            now - start,
+                            loop_time,
+                        ) {
+                            self.playback_buffer
+                                .push(cc.msg) // add this recorded event
+                                .ok(); // if vec is full, drop it
+                        }
+                    });
                 }
-            });
+            }
         }
 
-        result
+        self.time_last_checked = now;
+
+        &self.playback_buffer
     }
+}
+
+fn is_in_time_frame(check: u32, frame_begin: u64, frame_end: u64, loop_len: u32) -> bool {
+    check >= (frame_begin % loop_len as u64) as u32 // lower bound
+    && check <= (frame_end % loop_len as u64) as u32 // upper bound
 }

@@ -17,6 +17,7 @@ pub enum Action {
     ToggleSequence,
     KillConnection,
     StartRecording,
+    DeleteRecording,
 }
 
 pub struct Keybindings {
@@ -68,8 +69,13 @@ impl Keybindings {
             },
             KeyAction {
                 key: KeyCode::Enter,
-                description: "Start recording",
+                description: "Start/Overdub recording",
                 action: Action::StartRecording,
+            },
+            KeyAction {
+                key: KeyCode::Backspace,
+                description: "Delete recording",
+                action: Action::DeleteRecording,
             },
         ];
 
