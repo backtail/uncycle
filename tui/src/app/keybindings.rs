@@ -69,7 +69,7 @@ impl Keybindings {
             },
             KeyAction {
                 key: KeyCode::Enter,
-                description: "Start recording",
+                description: "Start/Overdub recording",
                 action: Action::StartRecording,
             },
             KeyAction {

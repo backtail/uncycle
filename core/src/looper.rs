@@ -18,6 +18,9 @@ pub struct Looper {
     record: bool,
     rec_start: Option<u64>,
     loop_len: Option<u32>,
+
+    overdub: bool,
+    overdub_start: Option<u64>,
 }
 
 impl Looper {
@@ -31,6 +34,9 @@ impl Looper {
             record: false,
             rec_start: None,
             loop_len: None,
+
+            overdub: false,
+            overdub_start: None,
         }
     }
 
@@ -38,9 +44,15 @@ impl Looper {
     pub fn start_recording(&mut self, loop_len: u32) {
         assert!(loop_len != 0);
 
-        if self.rec_start.is_none() && !self.record {
-            self.record = true;
-            self.loop_len = Some(loop_len);
+        if !self.record {
+            if self.rec_start.is_none() {
+                self.record = true;
+                self.loop_len = Some(loop_len);
+            } else {
+                if !self.overdub {
+                    self.overdub = true;
+                }
+            }
         }
     }
 
@@ -49,6 +61,8 @@ impl Looper {
         self.record = false;
         self.rec_start = None;
         self.loop_len = None;
+        self.overdub = false;
+        self.overdub_start = None;
     }
 
     pub fn check_if_started(&mut self, now: u64) -> bool {
@@ -61,10 +75,27 @@ impl Looper {
         }
     }
 
+    pub fn check_if_overdub_started(&mut self, now: u64) {
+        if self.overdub && self.overdub_start.is_none() {
+            self.overdub_start = Some(now);
+        }
+    }
+
     /// Must be called for every incoming CC message
     pub fn record_cc(&mut self, now: u64, cc_msg: &MidiMsg) {
         if self.record {
             if let Some(start_time) = self.rec_start {
+                self.recorded_cc
+                    .push(RecordedMidiMsg {
+                        msg: *cc_msg,
+                        time: (now - start_time) as u32,
+                    })
+                    .ok();
+            }
+        }
+
+        if self.overdub {
+            if let Some(start_time) = self.overdub_start {
                 self.recorded_cc
                     .push(RecordedMidiMsg {
                         msg: *cc_msg,
@@ -86,6 +117,17 @@ impl Looper {
                 }
             }
         }
+
+        if let Some(start) = self.overdub_start {
+            if self.overdub {
+                if let Some(len) = self.loop_len {
+                    if (now - start) as u32 >= len {
+                        self.overdub = false;
+                        self.overdub_start = None;
+                    }
+                }
+            }
+        }
     }
 
     /// Returns a heapless vector with pre-allocated 128 possible items of type `MidiMsg`, since it only returns the
@@ -96,22 +138,23 @@ impl Looper {
 
         if !self.record {
             if let Some(loop_time) = self.loop_len {
-                let rec_start = self.rec_start.unwrap();
-
-                self.recorded_cc.iter().for_each(|cc| {
-                    if is_in_time_frame(
-                        cc.time,
-                        self.time_last_checked - rec_start,
-                        now - rec_start,
-                        loop_time,
-                    ) {
-                        self.playback_buffer
-                            .push(cc.msg) // add this recorded event
-                            .ok(); // if vec is full, drop it
-                    }
-                });
+                if let Some(start) = self.rec_start {
+                    self.recorded_cc.iter().for_each(|cc| {
+                        if is_in_time_frame(
+                            cc.time,
+                            self.time_last_checked - start,
+                            now - start,
+                            loop_time,
+                        ) {
+                            self.playback_buffer
+                                .push(cc.msg) // add this recorded event
+                                .ok(); // if vec is full, drop it
+                        }
+                    });
+                }
             }
         }
+
         self.time_last_checked = now;
 
         &self.playback_buffer

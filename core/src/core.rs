@@ -154,6 +154,8 @@ impl UncycleCore {
             tx_q.push(MIDI_START).ok();
         }
 
+        self.looper.check_if_overdub_started(now);
+
         // MIDI Start
         if self.start_flag {
             self.start_flag = false;
