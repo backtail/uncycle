@@ -98,8 +98,21 @@ impl UncycleCore {
         self.clock_bpm
     }
 
+    /// Returns `n_steps` time for current bpm in µs
+    ///
+    /// BPM stands for *Beat per Minute* or more accurately **Quarter Note per Minute**
+    /// - time per quarter note: 60 s / `clock_bpm`
+    /// - `n_steps` are in sixteenths
+    fn bpm_to_us(&self, n_steps: u16) -> u32 {
+        assert!(self.clock_bpm != 0.0);
+
+        let quarter_note = 60.0 / self.clock_bpm; // in s
+
+        (n_steps as f32 * (quarter_note / 4.0) * 10E5) as u32 // in µs
+    }
+
     pub fn start_recording(&mut self) {
-        self.looper.start_recording();
+        self.looper.start_recording(self.bpm_to_us(16));
     }
 
     pub fn delete_recording(&mut self) {
