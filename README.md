@@ -14,11 +14,33 @@ The project is currently in VEAS (very early alpha stage).
 
 | Manufacturer | Name | MIDI monitoring | MIDI augmentation |
 | ------------ | ---- | :-------------: | :---------------: |
-| Roland       | TR-8 |     mostly      |        TBA        |
+| Roland       | TR-8 |  <li>[x]</li>   |   <li>[x]</li>    |
 
 ## TUI
 
 ![test](doc/screenshot_alpha_tr8.png)
+
+### How to  Use
+
+When the program is started, it automatically wants to recognize the Roland TR-8 (for now) and tries to connect to it. Check in `Midi Monitor` tab if it was successful.
+
+The interface is designed to be as intuitive as possible. Suggestions on improvements are welcome!
+
+| Keybind                        | Function          | Comment                                   |
+| ------------------------------ | ----------------- | ----------------------------------------- |
+| <kbd>Space</kbd>               | Start/Stop Device | Sends the actual Midi bytes               |
+| <kbd>Enter</kbd> (first time)  | Record            | Knob sequence via Midi CC (over 16 steps) |
+| <kbd>Enter</kbd> (after first) | Overdub           | Knob sequence via Midi CC (over 16 steps) |
+| <kbd>Backspace</kbd>           | Delete recording  | Start again with Record                   |
+
+Make sure the device is running before trying to record any CC loop.
+
+The looping is designed to work like tape machines, where there is only one track that can be recorded and overdubbed. Once a recording has been started, the loop will be played back at all times (16 steps for now). Also, right now `uncycle-tui` will send a clock at all times. The BPM can be changed with <kbd>+</kbd> and <kbd>-</kbd> by 1. (Try holding the key down.)
+
+### To be added (soon)
+
+- change the loop length
+- listen to external Midi clock
 
 ### Build
 
