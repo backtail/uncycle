@@ -61,7 +61,8 @@ pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>,
         move |_timestamp, message, _| {
             // first handle midi logic
             let elapsed = now.elapsed().as_micros() as u64;
-            core.lock().unwrap().midi_rx_callback(elapsed, message);
+
+            core.lock().unwrap().midi_rx_callback(message);
 
             // then handle logging
             if let Some(msg) = parse_midi_message(message) {
@@ -79,8 +80,8 @@ pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>,
 
                     MIDI_CONTORL_CHANGE => log.lock().unwrap().log_incoming_cc(format!(
                         "[{} ms {:3} ns] {} {}",
-                        now.elapsed().as_micros() / 1000,
-                        now.elapsed().as_micros() % 1000,
+                        elapsed / 1000,
+                        elapsed % 1000,
                         data1,
                         data2,
                     )),
@@ -155,13 +156,18 @@ pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>
 
             loop {
                 // poll @ 1kHz, thread timing accuracy does not matter since we pass time as paramter to callback
-                thread::sleep(Duration::from_millis(1));
+                thread::sleep(Duration::from_micros(100));
 
-                let bytes;
                 let elapsed = now.elapsed().as_micros() as u64;
 
                 {
-                    bytes = core.lock().unwrap().midi_tx_callback(elapsed);
+                    core.lock().unwrap().update_time(elapsed);
+                }
+
+                let bytes;
+
+                {
+                    bytes = core.lock().unwrap().midi_tx_callback();
                 }
 
                 // send MIDI outside of lock
@@ -191,8 +197,8 @@ pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>
                     if (*byte) & 0xF0 == MIDI_CONTORL_CHANGE {
                         log.lock().unwrap().log_outgoing_cc(format!(
                             "[{} ms {:3} ns] CC",
-                            now.elapsed().as_micros() / 1000,
-                            now.elapsed().as_micros() % 1000,
+                            elapsed / 1000,
+                            elapsed % 1000,
                         ));
                     }
                 }

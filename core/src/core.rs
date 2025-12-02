@@ -11,6 +11,11 @@ pub struct UncycleCore {
 
     looper: Looper,
 
+    /// time that passed since program start in µs
+    ///
+    /// should be kept on track in sub ms periods for good accuracy
+    now: u64,
+
     clock_running: bool,
     start_flag: bool,
     stop_flag: bool,
@@ -30,6 +35,8 @@ impl UncycleCore {
 
             looper: Looper::new(),
 
+            now: 0,
+
             clock_running: false,
             start_flag: false,
             stop_flag: false,
@@ -40,6 +47,11 @@ impl UncycleCore {
             kill_rx_conn: false,
             kill_tx_conn: false,
         }
+    }
+
+    /// Call this function periodically in ms, but preferrably 100µs intervals to keep time on track
+    pub fn update_time(&mut self, now: u64) {
+        self.now = now;
     }
 
     pub fn update_note(&mut self, note: u8, velocity: u8) {
@@ -119,8 +131,10 @@ impl UncycleCore {
         self.looper.delete_recording();
     }
 
-    fn handle_looper_playback(&mut self, now: u64, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
-        for bytes in self.looper.play_back_recording(now) {
+    fn handle_looper_playback(&mut self, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
+        self.looper.handle_timing(self.now);
+
+        for bytes in self.looper.play_back_recording(self.now) {
             for byte in bytes {
                 tx_q.push(*byte).ok();
             }
@@ -130,7 +144,7 @@ impl UncycleCore {
     }
 
     /// `now` is time elapsed since beginning of program start in microseconds
-    pub fn midi_rx_callback(&mut self, now: u64, message: &[u8]) {
+    pub fn midi_rx_callback(&mut self, message: &[u8]) {
         if let Some(in_type) = parse_midi_message(message) {
             let bytes: MidiMsg = [message[0], message[1], message[2]];
 
@@ -139,7 +153,7 @@ impl UncycleCore {
                 MIDI_NOTE_OFF => self.remove_note(bytes[1]),
                 MIDI_CONTORL_CHANGE => {
                     self.update_cc(bytes[1], bytes[2]);
-                    self.looper.record_cc(now, &bytes);
+                    self.looper.record_cc(self.now, &bytes);
                 }
                 _ => {}
             };
@@ -147,14 +161,14 @@ impl UncycleCore {
     }
 
     /// `now` is time elapsed since beginning of program start in microseconds
-    pub fn midi_tx_callback(&mut self, now: u64) -> Vec<u8, TX_MIDI_Q_LEN> {
+    pub fn midi_tx_callback(&mut self) -> Vec<u8, TX_MIDI_Q_LEN> {
         let mut tx_q = Vec::new();
 
-        if self.looper.check_if_started(now) {
+        if self.looper.check_if_started(self.now) {
             tx_q.push(MIDI_START).ok();
         }
 
-        self.looper.check_if_overdub_started(now);
+        self.looper.check_if_overdub_started(self.now);
 
         // MIDI Start
         if self.start_flag {
@@ -176,16 +190,14 @@ impl UncycleCore {
         // MIDI Clock
         let interval = (60_000_000.0 / (self.clock_bpm * 24.0)) as u64;
 
-        if now - self.last_clock_time >= interval {
-            self.last_clock_time = now;
+        if self.now - self.last_clock_time >= interval {
+            self.last_clock_time = self.now;
             self.clock_pulse_count = self.clock_pulse_count.wrapping_add(1);
-
-            self.looper.handle_timing(now);
 
             tx_q.push(MIDI_CLOCK).ok();
         }
 
-        self.handle_looper_playback(now, &mut tx_q);
+        self.handle_looper_playback(&mut tx_q);
 
         tx_q
     }
