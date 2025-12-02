@@ -80,6 +80,12 @@ impl UncycleCore {
         if self.clock_bpm >= 200.0 {
             self.clock_bpm = 200.0;
         }
+
+        self.looper.update_loop_len(self.clock_bpm);
+    }
+
+    pub fn set_loop_step_len(&mut self, n_steps: u16) {
+        self.looper.set_loop_steps(n_steps);
     }
 
     pub fn decrease_bpm_by(&mut self, amount: f32) {
@@ -88,6 +94,8 @@ impl UncycleCore {
         if self.clock_bpm <= 40.0 {
             self.clock_bpm = 40.0;
         }
+
+        self.looper.update_loop_len(self.clock_bpm);
     }
 
     pub fn start_stop_sequence(&mut self) {
@@ -110,21 +118,8 @@ impl UncycleCore {
         self.clock_bpm
     }
 
-    /// Returns `n_steps` time for current bpm in µs
-    ///
-    /// BPM stands for *Beat per Minute* or more accurately **Quarter Note per Minute**
-    /// - time per quarter note: 60 s / `clock_bpm`
-    /// - `n_steps` are in sixteenths
-    fn bpm_to_us(&self, n_steps: u16) -> u32 {
-        assert!(self.clock_bpm != 0.0);
-
-        let quarter_note = 60.0 / self.clock_bpm; // in s
-
-        (n_steps as f32 * (quarter_note / 4.0) * 10E5) as u32 // in µs
-    }
-
     pub fn start_recording(&mut self) {
-        self.looper.start_recording(self.bpm_to_us(16));
+        self.looper.start_recording(self.now);
     }
 
     pub fn delete_recording(&mut self) {
@@ -132,7 +127,7 @@ impl UncycleCore {
     }
 
     fn handle_looper_playback(&mut self, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
-        self.looper.handle_timing(self.now);
+        self.looper.handle_eol(self.now);
 
         for bytes in self.looper.play_back_recording(self.now) {
             for byte in bytes {
@@ -163,12 +158,6 @@ impl UncycleCore {
     /// `now` is time elapsed since beginning of program start in microseconds
     pub fn midi_tx_callback(&mut self) -> Vec<u8, TX_MIDI_Q_LEN> {
         let mut tx_q = Vec::new();
-
-        if self.looper.check_if_started(self.now) {
-            tx_q.push(MIDI_START).ok();
-        }
-
-        self.looper.check_if_overdub_started(self.now);
 
         // MIDI Start
         if self.start_flag {
