@@ -16,16 +16,16 @@ pub struct Looper {
 
     time_last_checked: u64,
 
-    recorded_cc: Vec<RecordedMidiMsg, 1024>,
-    record: bool,
+    pub recorded_cc: Vec<RecordedMidiMsg, 1024>,
+    pub record: bool,
     rec_start: Option<u64>,
 
-    loop_steps: u16,
+    pub loop_steps: u16,
 
     /// in microseconds
     loop_len: u32,
 
-    overdub: bool,
+    pub overdub: bool,
     overdub_start: Option<u64>,
 }
 

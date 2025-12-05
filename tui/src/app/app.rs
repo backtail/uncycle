@@ -1,3 +1,5 @@
+use crate::app::widgets;
+
 use super::{connection::setup_midi_socket, keybindings, log::Logger, tabs::*};
 
 use anyhow::Result;
@@ -5,8 +7,6 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Margin},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Tabs},
     Frame, Terminal,
 };
 
@@ -20,7 +20,7 @@ use keybindings::{Action, Keybindings};
 use uncycle_core::prelude::*;
 
 #[derive(PartialEq)]
-enum AppTab {
+pub enum AppTab {
     Main = 1,
     Device = 2,
     Midi = 3,
@@ -32,7 +32,7 @@ pub struct App {
     pub keybindings: Keybindings,
     pub core: Arc<Mutex<UncycleCore>>,
     pub log: Arc<Mutex<Logger>>,
-    current_tab: AppTab,
+    pub current_tab: AppTab,
     should_quit: bool,
 }
 
@@ -118,51 +118,50 @@ pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<
 }
 
 fn ui(f: &mut Frame, app: &App) {
+    // Layout
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(0)
         .constraints([
-            Constraint::Length(3), // Tabs
+            Constraint::Length(2), // Tabs
             Constraint::Min(10),   // Main content
         ])
         .split(f.area());
 
-    // Tabs
-    let tabs = Tabs::new(vec![
-        "[1] Main",
-        "[2] Device",
-        "[3] MIDI Monitor",
-        "[4] Settings",
-        "[5] Help",
-    ])
-    .padding(" ", " ")
-    .block(Block::default())
-    .select(match app.current_tab {
-        AppTab::Main => 0,
-        AppTab::Device => 1,
-        AppTab::Midi => 2,
-        AppTab::Settings => 3,
-        AppTab::Help => 4,
-    })
-    .style(Style::default().fg(Color::DarkGray))
-    .highlight_style(
-        Style::default()
-            .fg(Color::Green)
-            .add_modifier(Modifier::BOLD),
-    );
-    f.render_widget(tabs, chunks[0]);
+    let first_row = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(0)
+        .constraints([Constraint::Ratio(1, 2); 2])
+        .split(chunks[0]);
 
     let main_area = chunks[1].inner(Margin {
         horizontal: 1,
         vertical: 0,
     });
 
-    // Main content based on current tab
+    // Rendering
+
     match app.current_tab {
-        AppTab::Main => render_main_tab(f, app, main_area),
-        AppTab::Device => render_device_tab(f, app, main_area),
-        AppTab::Midi => render_midi_tab(f, app, main_area),
-        AppTab::Settings => render_settings_tab(f, app, main_area),
-        AppTab::Help => render_help_tab(f, app, main_area),
+        AppTab::Main => {
+            f.render_widget(widgets::ui_tabs(0), first_row[0]);
+            render_main_tab(f, app, main_area);
+        }
+        AppTab::Device => {
+            f.render_widget(widgets::ui_tabs(1), first_row[0]);
+            render_device_tab(f, app, main_area);
+        }
+        AppTab::Midi => {
+            f.render_widget(widgets::ui_tabs(2), first_row[0]);
+            render_midi_tab(f, app, main_area);
+        }
+        AppTab::Settings => {
+            f.render_widget(widgets::ui_tabs(3), first_row[0]);
+            render_settings_tab(f, app, main_area);
+        }
+        AppTab::Help => {
+            f.render_widget(widgets::ui_tabs(4), first_row[0]);
+            render_help_tab(f, app, main_area);
+        }
     }
 }

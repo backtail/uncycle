@@ -9,7 +9,7 @@ pub struct UncycleCore {
     /// allocate space for all possible values
     last_cc: [Option<u8>; N_CC_NUMBERS],
 
-    looper: Looper,
+    pub looper: Looper,
 
     /// time that passed since program start in µs
     ///
@@ -112,6 +112,10 @@ impl UncycleCore {
         } else {
             0
         }
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.clock_running
     }
 
     pub fn get_bpm(&self) -> f32 {
