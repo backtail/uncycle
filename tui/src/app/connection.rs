@@ -54,6 +54,18 @@ pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>,
         }
     }
 
+    let port_name = match input.port_name(in_port) {
+        Ok(name) => name,
+        Err(e) => {
+            log.lock()
+                .unwrap()
+                .log_misc(format!("Failed to get output port name: {}", e));
+            return;
+        }
+    };
+
+    let log_rx_callback = log.clone();
+
     // callback function is defined before entering loop
     let conn_result = input.connect(
         in_port,
@@ -71,22 +83,24 @@ pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>,
                 let data2 = message[2];
 
                 match msg {
-                    MIDI_NOTE_ON => log
+                    MIDI_NOTE_ON => log_rx_callback
                         .lock()
                         .unwrap()
                         .log_incoming_note(format!("NOTE ON:  {:02} {:02}", data1, data2)),
 
                     MIDI_NOTE_OFF => {}
 
-                    MIDI_CONTORL_CHANGE => log.lock().unwrap().log_incoming_cc(format!(
-                        "[{} ms {:3} ns] {} {}",
-                        elapsed / 1000,
-                        elapsed % 1000,
-                        data1,
-                        data2,
-                    )),
+                    MIDI_CONTORL_CHANGE => {
+                        log_rx_callback.lock().unwrap().log_incoming_cc(format!(
+                            "[{} ms {:3} ns] {} {}",
+                            elapsed / 1000,
+                            elapsed % 1000,
+                            data1,
+                            data2,
+                        ))
+                    }
 
-                    _ => log
+                    _ => log_rx_callback
                         .lock()
                         .unwrap()
                         .log_misc(format!("MIDI: {:02X} {:02X} {:02X}", status, data1, data2)),
@@ -97,9 +111,12 @@ pub fn midi_input_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>,
     );
 
     match conn_result {
-        Ok(_conn) => loop {
-            thread::sleep(Duration::from_millis(16));
-        },
+        Ok(_conn) => {
+            log_in_port(&log, port_name);
+            loop {
+                thread::sleep(Duration::from_millis(16));
+            }
+        }
 
         Err(_e) => {}
     }
@@ -144,15 +161,11 @@ pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>
         }
     };
 
-    let conn_result = output.connect(out_port, "uncycle-midi-in");
+    let conn_result = output.connect(out_port, "uncycle-midi-out");
 
     match conn_result {
         Ok(mut conn) => {
-            {
-                let mut locked = log.lock().unwrap();
-                locked.port_out_name = Some(port_name.clone());
-                locked.log_misc(format!("Connected to MIDI out port: {}", port_name));
-            }
+            log_out_port(&log, port_name);
 
             loop {
                 // poll @ 1kHz, thread timing accuracy does not matter since we pass time as paramter to callback
@@ -211,4 +224,16 @@ pub fn midi_output_thread(core: Arc<Mutex<UncycleCore>>, log: Arc<Mutex<Logger>>
                 .log_misc(format!("Failed to connect to MIDI port: {}", e));
         }
     }
+}
+
+fn log_in_port(log: &Arc<Mutex<Logger>>, port_name: String) {
+    let mut locked = log.lock().unwrap();
+    locked.port_out_name = Some(port_name.clone());
+    locked.log_misc(format!("Connected to in port: {}", port_name));
+}
+
+fn log_out_port(log: &Arc<Mutex<Logger>>, port_name: String) {
+    let mut locked = log.lock().unwrap();
+    locked.port_out_name = Some(port_name.clone());
+    locked.log_misc(format!("Connected to out port: {}", port_name));
 }
