@@ -56,13 +56,10 @@ impl App {
                 Action::CycleTabs => self.cycle_tabs(),
                 Action::RevCycleTabs => self.rev_cycle_tabs(),
                 Action::ToggleSequence => self.core.lock().unwrap().start_stop_sequence(),
-                Action::KillConnection => {
-                    let mut locked = self.core.lock().unwrap();
-                    locked.kill_rx_conn = true;
-                    locked.kill_tx_conn = true;
-                }
                 Action::StartRecording => self.core.lock().unwrap().start_recording(),
                 Action::DeleteRecording => self.core.lock().unwrap().delete_recording(),
+                Action::HalfLoopLen => self.core.lock().unwrap().half_loop_len(),
+                Action::DoubleLoopLen => self.core.lock().unwrap().double_loop_len(),
             }
         } else {
             // Handle tab switching

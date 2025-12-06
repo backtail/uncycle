@@ -2,6 +2,8 @@ use super::{looper::Looper, midi::*};
 use heapless::Vec;
 
 const TX_MIDI_Q_LEN: usize = 16;
+const LOOPER_MIN_LEN: u16 = 4;
+const LOOPER_MAX_LEN: u16 = 256;
 
 pub struct UncycleCore {
     /// allocate space for all possible values
@@ -128,6 +130,18 @@ impl UncycleCore {
 
     pub fn delete_recording(&mut self) {
         self.looper.delete_recording();
+    }
+
+    pub fn half_loop_len(&mut self) {
+        if self.looper.loop_steps > LOOPER_MIN_LEN {
+            self.looper.set_loop_steps(self.looper.loop_steps / 2);
+        }
+    }
+
+    pub fn double_loop_len(&mut self) {
+        if self.looper.loop_steps < LOOPER_MAX_LEN {
+            self.looper.set_loop_steps(self.looper.loop_steps * 2);
+        }
     }
 
     fn handle_looper_playback(&mut self, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
