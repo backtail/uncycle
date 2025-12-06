@@ -1,3 +1,39 @@
+use super::DeviceInterface;
+use heapless::String;
+
+#[derive(Clone)]
+pub struct TR8 {
+    running: bool,
+}
+
+impl TR8 {
+    pub fn init() -> Self {
+        Self { running: false }
+    }
+}
+
+impl DeviceInterface for TR8 {
+    fn run(&mut self) {
+        self.running = true;
+    }
+
+    fn stop(&mut self) {
+        self.running = false;
+    }
+
+    fn is_running(&self) -> bool {
+        self.running
+    }
+
+    fn name_to_str(&self) -> String<64> {
+        String::try_from("TR-8").unwrap()
+    }
+
+    fn manufacturer_to_str(&self) -> String<64> {
+        String::try_from("Roland").unwrap()
+    }
+}
+
 /// (number: u8, name: &'static str)
 type RichMidiCC = (u8, &'static str);
 

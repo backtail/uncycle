@@ -17,7 +17,9 @@ use std::{
 
 use keybindings::{Action, Keybindings};
 
-use uncycle_core::prelude::*;
+use uncycle_core::{devices::TR8, prelude::*};
+
+const DEFAULT_BPM: f32 = 120.0;
 
 #[derive(PartialEq)]
 pub enum AppTab {
@@ -32,7 +34,7 @@ pub struct App {
     pub keybindings: Keybindings,
     pub core: Arc<Mutex<UncycleCore>>,
     pub log: Arc<Mutex<Logger>>,
-    pub current_tab: AppTab,
+    pub tab: AppTab,
     should_quit: bool,
 }
 
@@ -40,9 +42,9 @@ impl App {
     pub fn new() -> Self {
         Self {
             keybindings: Keybindings::new(),
-            core: Arc::new(Mutex::new(UncycleCore::new())),
+            core: Arc::new(Mutex::new(UncycleCore::new(DEFAULT_BPM))),
             log: Arc::new(Mutex::new(Logger::new())),
-            current_tab: AppTab::Main,
+            tab: AppTab::Main,
             should_quit: false,
         }
     }
@@ -64,39 +66,45 @@ impl App {
         } else {
             // Handle tab switching
             match key {
-                KeyCode::Char('1') => self.current_tab = AppTab::Main,
-                KeyCode::Char('2') => self.current_tab = AppTab::Device,
-                KeyCode::Char('3') => self.current_tab = AppTab::Midi,
-                KeyCode::Char('4') => self.current_tab = AppTab::Settings,
-                KeyCode::Char('5') => self.current_tab = AppTab::Help,
+                KeyCode::Char('1') => self.tab = AppTab::Main,
+                KeyCode::Char('2') => self.tab = AppTab::Device,
+                KeyCode::Char('3') => self.tab = AppTab::Midi,
+                KeyCode::Char('4') => self.tab = AppTab::Settings,
+                KeyCode::Char('5') => self.tab = AppTab::Help,
                 _ => {}
             }
         }
     }
 
     fn cycle_tabs(&mut self) {
-        match self.current_tab {
-            AppTab::Main => self.current_tab = AppTab::Device,
-            AppTab::Device => self.current_tab = AppTab::Midi,
-            AppTab::Midi => self.current_tab = AppTab::Settings,
-            AppTab::Settings => self.current_tab = AppTab::Help,
-            AppTab::Help => self.current_tab = AppTab::Main,
+        match self.tab {
+            AppTab::Main => self.tab = AppTab::Device,
+            AppTab::Device => self.tab = AppTab::Midi,
+            AppTab::Midi => self.tab = AppTab::Settings,
+            AppTab::Settings => self.tab = AppTab::Help,
+            AppTab::Help => self.tab = AppTab::Main,
         }
     }
 
     fn rev_cycle_tabs(&mut self) {
-        match self.current_tab {
-            AppTab::Main => self.current_tab = AppTab::Help,
-            AppTab::Device => self.current_tab = AppTab::Main,
-            AppTab::Midi => self.current_tab = AppTab::Device,
-            AppTab::Settings => self.current_tab = AppTab::Midi,
-            AppTab::Help => self.current_tab = AppTab::Settings,
+        match self.tab {
+            AppTab::Main => self.tab = AppTab::Help,
+            AppTab::Device => self.tab = AppTab::Main,
+            AppTab::Midi => self.tab = AppTab::Device,
+            AppTab::Settings => self.tab = AppTab::Midi,
+            AppTab::Help => self.tab = AppTab::Settings,
         }
     }
 }
 
 pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     setup_midi_socket(app.core.clone(), app.log.clone());
+
+    // default to TR-8 for now
+    app.core
+        .lock()
+        .unwrap()
+        .set_device(SupportedDevice::from(TR8::init()));
 
     while !app.should_quit {
         terminal.draw(|f| ui(f, app))?;
@@ -139,7 +147,7 @@ fn ui(f: &mut Frame, app: &App) {
 
     // Rendering
 
-    match app.current_tab {
+    match app.tab {
         AppTab::Main => {
             f.render_widget(widgets::ui_tabs(0), first_row[0]);
             render_main_tab(f, app, main_area);

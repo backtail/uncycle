@@ -1,4 +1,8 @@
-use super::{looper::Looper, midi::*};
+use super::{
+    devices::{DeviceInterface, SupportedDevice},
+    looper::Looper,
+    midi::*,
+};
 use heapless::Vec;
 
 const TX_MIDI_Q_LEN: usize = 16;
@@ -11,6 +15,7 @@ pub struct UncycleCore {
     /// allocate space for all possible values
     last_cc: [Option<u8>; N_CC_NUMBERS],
 
+    pub device: Option<SupportedDevice>,
     pub looper: Looper,
 
     /// time that passed since program start in µs
@@ -18,10 +23,9 @@ pub struct UncycleCore {
     /// should be kept on track in sub ms periods for good accuracy
     now: u64,
 
-    clock_running: bool,
     start_flag: bool,
     stop_flag: bool,
-    clock_bpm: f32,
+    bpm: f32,
     last_clock_time: u64, // in microseconds
     clock_pulse_count: u32,
 
@@ -30,25 +34,33 @@ pub struct UncycleCore {
 }
 
 impl UncycleCore {
-    pub fn new() -> Self {
+    pub fn new(bpm: f32) -> Self {
         Self {
             active_notes: [None; N_NOTES],
             last_cc: [None; N_CC_NUMBERS],
 
-            looper: Looper::new(),
+            device: None,
+            looper: Looper::new(bpm),
 
             now: 0,
 
-            clock_running: false,
             start_flag: false,
             stop_flag: false,
-            clock_bpm: 120.0,
+            bpm,
             last_clock_time: 0,
             clock_pulse_count: 0,
 
             kill_rx_conn: false,
             kill_tx_conn: false,
         }
+    }
+
+    pub fn set_device(&mut self, device: SupportedDevice) {
+        self.device = Some(device);
+    }
+
+    pub fn unset_device(&mut self) {
+        self.device = None;
     }
 
     /// Call this function periodically in ms, but preferrably 100µs intervals to keep time on track
@@ -77,13 +89,13 @@ impl UncycleCore {
     }
 
     pub fn increase_bpm_by(&mut self, amount: f32) {
-        self.clock_bpm += amount;
+        self.bpm += amount;
 
-        if self.clock_bpm >= 200.0 {
-            self.clock_bpm = 200.0;
+        if self.bpm >= 200.0 {
+            self.bpm = 200.0;
         }
 
-        self.looper.update_loop_len(self.clock_bpm);
+        self.looper.update_loop_len(self.bpm);
     }
 
     pub fn set_loop_step_len(&mut self, n_steps: u16) {
@@ -91,45 +103,53 @@ impl UncycleCore {
     }
 
     pub fn decrease_bpm_by(&mut self, amount: f32) {
-        self.clock_bpm -= amount;
+        self.bpm -= amount;
 
-        if self.clock_bpm <= 40.0 {
-            self.clock_bpm = 40.0;
+        if self.bpm <= 40.0 {
+            self.bpm = 40.0;
         }
 
-        self.looper.update_loop_len(self.clock_bpm);
+        self.looper.update_loop_len(self.bpm);
     }
 
     pub fn start_stop_sequence(&mut self) {
-        if self.clock_running {
-            self.stop_flag = true;
-        } else {
-            self.start_flag = true;
+        if let Some(device) = &self.device {
+            if device.is_running() {
+                self.stop_flag = true;
+            } else {
+                self.start_flag = true;
+            }
         }
     }
 
     pub fn get_step_number(&mut self) -> u8 {
-        if self.clock_running {
-            ((self.clock_pulse_count / 6) % 16) as u8
+        if let Some(device) = &self.device {
+            if device.is_running() {
+                ((self.clock_pulse_count / 6) % 16) as u8
+            } else {
+                0
+            }
         } else {
             0
         }
     }
 
-    pub fn is_running(&self) -> bool {
-        self.clock_running
-    }
-
     pub fn get_bpm(&self) -> f32 {
-        self.clock_bpm
+        self.bpm
     }
 
     pub fn start_recording(&mut self) {
-        self.looper.start_recording(self.now);
+        if let Some(device) = &self.device {
+            if device.is_running() {
+                self.looper.start_recording(self.now);
+            }
+        }
     }
 
     pub fn delete_recording(&mut self) {
-        self.looper.delete_recording();
+        if self.device.is_some() {
+            self.looper.delete_recording();
+        }
     }
 
     pub fn half_loop_len(&mut self) {
@@ -177,25 +197,27 @@ impl UncycleCore {
     pub fn midi_tx_callback(&mut self) -> Vec<u8, TX_MIDI_Q_LEN> {
         let mut tx_q = Vec::new();
 
-        // MIDI Start
-        if self.start_flag {
-            self.start_flag = false;
-            self.clock_running = true;
+        if let Some(device) = &mut self.device {
+            // MIDI Start
+            if self.start_flag {
+                self.start_flag = false;
+                device.run();
 
-            tx_q.push(MIDI_START).ok();
-            self.clock_pulse_count = 0;
-        }
+                tx_q.push(MIDI_START).ok();
+                self.clock_pulse_count = 0;
+            }
 
-        // MIDI Stop
-        if self.stop_flag {
-            self.stop_flag = false;
-            self.clock_running = false;
+            // MIDI Stop
+            if self.stop_flag {
+                self.stop_flag = false;
+                device.stop();
 
-            tx_q.push(MIDI_STOP).ok();
+                tx_q.push(MIDI_STOP).ok();
+            }
         }
 
         // MIDI Clock
-        let interval = (60_000_000.0 / (self.clock_bpm * 24.0)) as u64;
+        let interval = (60_000_000.0 / (self.bpm * 24.0)) as u64;
 
         if self.now - self.last_clock_time >= interval {
             self.last_clock_time = self.now;

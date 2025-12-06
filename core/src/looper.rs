@@ -30,7 +30,7 @@ pub struct Looper {
 }
 
 impl Looper {
-    pub fn new() -> Self {
+    pub fn new(bpm: f32) -> Self {
         Self {
             playback_buffer: Vec::new(),
 
@@ -41,7 +41,7 @@ impl Looper {
             rec_start: None,
 
             loop_steps: DEFAULT_REC_LEN_STEPS,
-            loop_len: bpm_to_us(120.0, DEFAULT_REC_LEN_STEPS),
+            loop_len: bpm_to_us(bpm, DEFAULT_REC_LEN_STEPS),
 
             overdub: false,
             overdub_start: None,
@@ -168,7 +168,7 @@ fn is_in_time_frame(check: u32, frame_begin: u64, frame_end: u64, loop_len: u32)
 /// Returns `n_steps` time for current bpm in µs
 ///
 /// BPM stands for *Beat per Minute* or more accurately **Quarter Note per Minute**
-/// - time per quarter note: 60 s / `clock_bpm`
+/// - time per quarter note: 60 s / `bpm`
 /// - `n_steps` are in sixteenths
 fn bpm_to_us(bpm: f32, n_steps: u16) -> u32 {
     assert!(bpm != 0.0);
