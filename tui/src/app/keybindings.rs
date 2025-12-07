@@ -19,6 +19,8 @@ pub enum Action {
     DeleteRecording,
     DoubleLoopLen,
     HalfLoopLen,
+    ToggleMenu,
+    ToggleHelp,
 }
 
 pub struct Keybindings {
@@ -82,6 +84,21 @@ impl Keybindings {
                 key: KeyCode::Char('k'),
                 description: "Double Loop Length",
                 action: Action::DoubleLoopLen,
+            },
+            KeyAction {
+                key: KeyCode::Esc,
+                description: "Show Menu",
+                action: Action::ToggleMenu,
+            },
+            KeyAction {
+                key: KeyCode::Char('m'),
+                description: "Show Menu",
+                action: Action::ToggleMenu,
+            },
+            KeyAction {
+                key: KeyCode::Char('?'),
+                description: "Show Help",
+                action: Action::ToggleHelp,
             },
         ];
 
