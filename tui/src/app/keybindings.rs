@@ -15,9 +15,10 @@ pub enum Action {
     CycleTabs,
     RevCycleTabs,
     ToggleSequence,
-    KillConnection,
     StartRecording,
     DeleteRecording,
+    DoubleLoopLen,
+    HalfLoopLen,
 }
 
 pub struct Keybindings {
@@ -63,11 +64,6 @@ impl Keybindings {
                 action: Action::ToggleSequence,
             },
             KeyAction {
-                key: KeyCode::Esc,
-                description: "Kill MIDI connection",
-                action: Action::KillConnection,
-            },
-            KeyAction {
                 key: KeyCode::Enter,
                 description: "Start/Overdub recording",
                 action: Action::StartRecording,
@@ -76,6 +72,16 @@ impl Keybindings {
                 key: KeyCode::Backspace,
                 description: "Delete recording",
                 action: Action::DeleteRecording,
+            },
+            KeyAction {
+                key: KeyCode::Char('j'),
+                description: "Half Loop Length",
+                action: Action::HalfLoopLen,
+            },
+            KeyAction {
+                key: KeyCode::Char('k'),
+                description: "Double Loop Length",
+                action: Action::DoubleLoopLen,
             },
         ];
 

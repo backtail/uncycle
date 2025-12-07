@@ -1,7 +1,13 @@
-use super::{looper::Looper, midi::*};
+use super::{
+    devices::{DeviceInterface, SupportedDevice},
+    looper::Looper,
+    midi::*,
+};
 use heapless::Vec;
 
 const TX_MIDI_Q_LEN: usize = 16;
+const LOOPER_MIN_LEN: u16 = 4;
+const LOOPER_MAX_LEN: u16 = 256;
 
 pub struct UncycleCore {
     /// allocate space for all possible values
@@ -9,12 +15,17 @@ pub struct UncycleCore {
     /// allocate space for all possible values
     last_cc: [Option<u8>; N_CC_NUMBERS],
 
-    looper: Looper,
+    pub device: Option<SupportedDevice>,
+    pub looper: Looper,
 
-    clock_running: bool,
+    /// time that passed since program start in µs
+    ///
+    /// should be kept on track in sub ms periods for good accuracy
+    now: u64,
+
     start_flag: bool,
     stop_flag: bool,
-    clock_bpm: f32,
+    bpm: f32,
     last_clock_time: u64, // in microseconds
     clock_pulse_count: u32,
 
@@ -23,23 +34,38 @@ pub struct UncycleCore {
 }
 
 impl UncycleCore {
-    pub fn new() -> Self {
+    pub fn new(bpm: f32) -> Self {
         Self {
             active_notes: [None; N_NOTES],
             last_cc: [None; N_CC_NUMBERS],
 
-            looper: Looper::new(),
+            device: None,
+            looper: Looper::new(bpm),
 
-            clock_running: false,
+            now: 0,
+
             start_flag: false,
             stop_flag: false,
-            clock_bpm: 120.0,
+            bpm,
             last_clock_time: 0,
             clock_pulse_count: 0,
 
             kill_rx_conn: false,
             kill_tx_conn: false,
         }
+    }
+
+    pub fn set_device(&mut self, device: SupportedDevice) {
+        self.device = Some(device);
+    }
+
+    pub fn unset_device(&mut self) {
+        self.device = None;
+    }
+
+    /// Call this function periodically in ms, but preferrably 100µs intervals to keep time on track
+    pub fn update_time(&mut self, now: u64) {
+        self.now = now;
     }
 
     pub fn update_note(&mut self, note: u8, velocity: u8) {
@@ -63,64 +89,85 @@ impl UncycleCore {
     }
 
     pub fn increase_bpm_by(&mut self, amount: f32) {
-        self.clock_bpm += amount;
+        self.bpm += amount;
 
-        if self.clock_bpm >= 200.0 {
-            self.clock_bpm = 200.0;
+        if self.bpm >= 200.0 {
+            self.bpm = 200.0;
         }
+
+        self.looper.update_loop_len(self.bpm);
+    }
+
+    pub fn set_loop_step_len(&mut self, n_steps: u16) {
+        self.looper.set_loop_steps(n_steps);
     }
 
     pub fn decrease_bpm_by(&mut self, amount: f32) {
-        self.clock_bpm -= amount;
+        self.bpm -= amount;
 
-        if self.clock_bpm <= 40.0 {
-            self.clock_bpm = 40.0;
+        if self.bpm <= 40.0 {
+            self.bpm = 40.0;
         }
+
+        self.looper.update_loop_len(self.bpm);
     }
 
     pub fn start_stop_sequence(&mut self) {
-        if self.clock_running {
-            self.stop_flag = true;
-        } else {
-            self.start_flag = true;
+        if let Some(device) = &self.device {
+            if device.is_running() {
+                self.stop_flag = true;
+            } else {
+                self.start_flag = true;
+            }
         }
     }
 
     pub fn get_step_number(&mut self) -> u8 {
-        if self.clock_running {
-            ((self.clock_pulse_count / 6) % 16) as u8
+        if let Some(device) = &self.device {
+            if device.is_running() {
+                ((self.clock_pulse_count / 6) % 16) as u8
+            } else {
+                0
+            }
         } else {
             0
         }
     }
 
     pub fn get_bpm(&self) -> f32 {
-        self.clock_bpm
-    }
-
-    /// Returns `n_steps` time for current bpm in µs
-    ///
-    /// BPM stands for *Beat per Minute* or more accurately **Quarter Note per Minute**
-    /// - time per quarter note: 60 s / `clock_bpm`
-    /// - `n_steps` are in sixteenths
-    fn bpm_to_us(&self, n_steps: u16) -> u32 {
-        assert!(self.clock_bpm != 0.0);
-
-        let quarter_note = 60.0 / self.clock_bpm; // in s
-
-        (n_steps as f32 * (quarter_note / 4.0) * 10E5) as u32 // in µs
+        self.bpm
     }
 
     pub fn start_recording(&mut self) {
-        self.looper.start_recording(self.bpm_to_us(16));
+        if let Some(device) = &self.device {
+            if device.is_running() {
+                self.looper.start_recording(self.now);
+            }
+        }
     }
 
     pub fn delete_recording(&mut self) {
-        self.looper.delete_recording();
+        if self.device.is_some() {
+            self.looper.delete_recording();
+        }
     }
 
-    fn handle_looper_playback(&mut self, now: u64, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
-        for bytes in self.looper.play_back_recording(now) {
+    pub fn half_loop_len(&mut self) {
+        if self.looper.loop_steps > LOOPER_MIN_LEN {
+            self.looper.set_loop_steps(self.looper.loop_steps / 2);
+        }
+    }
+
+    pub fn double_loop_len(&mut self) {
+        if self.looper.loop_steps < LOOPER_MAX_LEN {
+            self.looper.set_loop_steps(self.looper.loop_steps * 2);
+        }
+    }
+
+    fn handle_looper_playback(&mut self, tx_q: &mut Vec<u8, TX_MIDI_Q_LEN>) {
+        self.looper.handle_eol(self.now);
+
+        for bytes in self.looper.play_back_recording(self.now) {
             for byte in bytes {
                 tx_q.push(*byte).ok();
             }
@@ -130,7 +177,7 @@ impl UncycleCore {
     }
 
     /// `now` is time elapsed since beginning of program start in microseconds
-    pub fn midi_rx_callback(&mut self, now: u64, message: &[u8]) {
+    pub fn midi_rx_callback(&mut self, message: &[u8]) {
         if let Some(in_type) = parse_midi_message(message) {
             let bytes: MidiMsg = [message[0], message[1], message[2]];
 
@@ -139,7 +186,7 @@ impl UncycleCore {
                 MIDI_NOTE_OFF => self.remove_note(bytes[1]),
                 MIDI_CONTORL_CHANGE => {
                     self.update_cc(bytes[1], bytes[2]);
-                    self.looper.record_cc(now, &bytes);
+                    self.looper.record_cc(self.now, &bytes);
                 }
                 _ => {}
             };
@@ -147,45 +194,39 @@ impl UncycleCore {
     }
 
     /// `now` is time elapsed since beginning of program start in microseconds
-    pub fn midi_tx_callback(&mut self, now: u64) -> Vec<u8, TX_MIDI_Q_LEN> {
+    pub fn midi_tx_callback(&mut self) -> Vec<u8, TX_MIDI_Q_LEN> {
         let mut tx_q = Vec::new();
 
-        if self.looper.check_if_started(now) {
-            tx_q.push(MIDI_START).ok();
-        }
+        if let Some(device) = &mut self.device {
+            // MIDI Start
+            if self.start_flag {
+                self.start_flag = false;
+                device.run();
 
-        self.looper.check_if_overdub_started(now);
+                tx_q.push(MIDI_START).ok();
+                self.clock_pulse_count = 0;
+            }
 
-        // MIDI Start
-        if self.start_flag {
-            self.start_flag = false;
-            self.clock_running = true;
+            // MIDI Stop
+            if self.stop_flag {
+                self.stop_flag = false;
+                device.stop();
 
-            tx_q.push(MIDI_START).ok();
-            self.clock_pulse_count = 0;
-        }
-
-        // MIDI Stop
-        if self.stop_flag {
-            self.stop_flag = false;
-            self.clock_running = false;
-
-            tx_q.push(MIDI_STOP).ok();
+                tx_q.push(MIDI_STOP).ok();
+            }
         }
 
         // MIDI Clock
-        let interval = (60_000_000.0 / (self.clock_bpm * 24.0)) as u64;
+        let interval = (60_000_000.0 / (self.bpm * 24.0)) as u64;
 
-        if now - self.last_clock_time >= interval {
-            self.last_clock_time = now;
+        if self.now - self.last_clock_time >= interval {
+            self.last_clock_time = self.now;
             self.clock_pulse_count = self.clock_pulse_count.wrapping_add(1);
-
-            self.looper.handle_timing(now);
 
             tx_q.push(MIDI_CLOCK).ok();
         }
 
-        self.handle_looper_playback(now, &mut tx_q);
+        self.handle_looper_playback(&mut tx_q);
 
         tx_q
     }

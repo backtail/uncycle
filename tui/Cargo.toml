@@ -10,6 +10,7 @@ repository = "https://github.com/backtail/uncycle"
 [dependencies]
 crossterm = "0.29"
 ratatui = "0.29"
+tui-big-text = "0.7.3"
 anyhow = "1.0"
 midir = "0.10"
 uncycle-core = { path = "../core/" }

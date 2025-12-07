@@ -9,6 +9,7 @@ repository = "https://github.com/backtail/uncycle"
 
 [dependencies]
 heapless = "0.9.2"
+enum_dispatch = "0.3.13"
 
 [features]
 default = []

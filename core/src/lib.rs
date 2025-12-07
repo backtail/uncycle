@@ -11,5 +11,6 @@ mod midi;
 
 pub mod prelude {
     pub use crate::core::UncycleCore;
+    pub use crate::devices::{DeviceInterface, SupportedDevice};
     pub use crate::midi::*;
 }
