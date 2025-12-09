@@ -1,42 +1,31 @@
-use crate::app;
-
-use super::{connection::setup_midi_socket, keybindings, log::Logger, tabs::*};
+use super::{connection::setup_midi_socket, keybindings, log::Logger, menu::*, tabs::*};
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use ratatui::{
-    backend::Backend,
-    buffer::Buffer,
-    layout::{Margin, Rect},
-    style::{Color, Modifier, Style, Stylize},
-    widgets::{Block, BorderType, Borders, Clear, Tabs, Widget},
-    Frame, Terminal,
-};
-
+use keybindings::{Action, Keybindings};
+use ratatui::prelude::*;
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-
-use keybindings::{Action, Keybindings};
-
 use uncycle_core::{devices::TR8, prelude::*};
 
 const DEFAULT_BPM: f32 = 120.0;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum AppTab {
     Main = 1,
     Device = 2,
     Midi = 3,
 }
 
+#[derive(Clone)]
 pub struct App {
     pub keybindings: Keybindings,
     pub core: Arc<Mutex<UncycleCore>>,
     pub log: Arc<Mutex<Logger>>,
     pub tab: AppTab,
-    menu: PopupMenu,
+    pub menu: PopupMenu,
     should_quit: bool,
 }
 
@@ -67,6 +56,17 @@ impl App {
                 Action::DoubleLoopLen => self.core.lock().unwrap().double_loop_len(),
                 Action::ToggleMenu => self.toggle_tab_menu(PopupTab::Menu),
                 Action::ToggleHelp => self.toggle_tab_menu(PopupTab::Help),
+                Action::MenuMoveDown => match self.menu.settings.focus {
+                    FocusArea::Settings => self.menu.settings.next_setting(),
+                    FocusArea::Options => self.menu.settings.next_option(),
+                },
+                Action::MenuMoveUp => match self.menu.settings.focus {
+                    FocusArea::Settings => self.menu.settings.previous_setting(),
+                    FocusArea::Options => self.menu.settings.previous_option(),
+                },
+                Action::MenuEnter => self.menu.settings.switch_focus(),
+
+                Action::MenuExit => self.menu.settings.switch_focus(),
             }
         } else {
             // Handle tab switching
@@ -129,7 +129,7 @@ pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<
     Ok(())
 }
 
-fn ui(f: &mut Frame, app: &App) {
+fn ui(f: &mut Frame, app: &mut App) {
     // Layout
     let main_area = f.area().inner(Margin {
         horizontal: 1,
@@ -143,87 +143,5 @@ fn ui(f: &mut Frame, app: &App) {
         AppTab::Midi => render_midi_tab(f, app, main_area),
     }
 
-    // Overlay Popup Menu
-    f.render_widget(PopupMenu::draw(&app.menu), f.area());
-}
-
-#[derive(PartialEq, Clone)]
-pub enum PopupTab {
-    Menu,
-    Help,
-}
-
-impl PopupTab {
-    pub fn tab_number(&self) -> usize {
-        match self {
-            Self::Menu => 0,
-            Self::Help => 1,
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct PopupMenu {
-    pub is_active: bool,
-    pub tab: PopupTab,
-}
-
-impl PopupMenu {
-    pub fn new() -> Self {
-        Self {
-            is_active: false,
-            tab: PopupTab::Menu,
-        }
-    }
-    pub fn draw(widget: &PopupMenu) -> Self {
-        widget.clone()
-    }
-}
-
-impl Widget for PopupMenu {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        if self.is_active {
-            let popup_area = area.inner(Margin {
-                horizontal: area.width / 6,
-                vertical: area.height / 7,
-            });
-
-            // gray out background
-            Block::new().fg(Color::DarkGray).render(area, buf);
-
-            // clear popup area
-            Clear.render(popup_area, buf);
-
-            // popup border
-            Block::new()
-                .title("Menu")
-                .title_style(Color::Gray)
-                .borders(Borders::ALL)
-                .border_type(BorderType::Double)
-                .border_style(Color::Gray)
-                .render(popup_area, buf);
-
-            let tab_area = popup_area.inner(Margin {
-                horizontal: 2,
-                vertical: 2,
-            });
-
-            match self.tab {
-                PopupTab::Menu => {}
-                PopupTab::Help => app::tabs::HelpMenu::default().render(tab_area, buf),
-            }
-
-            Tabs::new(vec!["[m] Menu", "[?] Help"])
-                .select(self.tab.tab_number())
-                .padding(" ", " ")
-                .block(Block::default())
-                .style(Style::default().fg(Color::Gray))
-                .highlight_style(
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                )
-                .render(popup_area, buf);
-        }
-    }
+    render_popup_menu(f, app, f.area());
 }
