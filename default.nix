@@ -14,7 +14,7 @@ buildEnv.pkgs.rustPlatform.buildRustPackage {
   src = ./.;
   cargoLock.lockFile = ./Cargo.lock;
 
-  nativeBuildInputs = buildEnv.nativePlatformDeps;
+  nativeBuildInputs = buildEnv.nativePlatformDeps ++ [ buildEnv.rustToolchain ];
   buildInputs = buildEnv.platformDeps;
 
   cargoBuildFlags = [
