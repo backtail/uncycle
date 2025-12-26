@@ -58,11 +58,17 @@ impl App {
                 Action::ToggleHelp => self.toggle_tab_menu(PopupTab::Help),
                 Action::MenuMoveDown => match self.menu.settings.focus {
                     FocusArea::Settings => self.menu.settings.next_setting(),
-                    FocusArea::Options => self.menu.settings.next_option(),
+                    FocusArea::Options => {
+                        self.menu.settings.next_option();
+                        self.menu.settings.apply_current_setting();
+                    }
                 },
                 Action::MenuMoveUp => match self.menu.settings.focus {
                     FocusArea::Settings => self.menu.settings.previous_setting(),
-                    FocusArea::Options => self.menu.settings.previous_option(),
+                    FocusArea::Options => {
+                        self.menu.settings.previous_option();
+                        self.menu.settings.apply_current_setting();
+                    }
                 },
                 Action::MenuEnter => self.menu.settings.switch_focus(),
 

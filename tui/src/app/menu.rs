@@ -117,36 +117,45 @@ impl NestedSelectionState {
         }
     }
 
-    pub fn handle_key_event(&mut self, key: KeyEvent) -> bool {
-        match key.code {
-            KeyCode::Up => {
-                match self.focus {
-                    FocusArea::Settings => self.previous_setting(),
-                    FocusArea::Options => self.previous_option(),
-                }
-                true
+    pub fn apply_current_setting(&mut self) {
+        if let Some(setting) = self.settings.get(self.selected_setting) {
+            // This is where you trigger your application logic
+            let setting_name = &setting.name;
+            let option_value = &setting.options[setting.selected_option];
+
+            // Dispatch based on setting name
+            match setting_name.as_str() {
+                "Theme" => self.handle_theme_change(option_value),
+                "Language" => self.handle_language_change(option_value),
+                "Font Size" => self.handle_font_size_change(option_value),
+                "Notifications" => self.handle_notifications_change(option_value),
+                _ => println!("Setting '{}' changed to: {}", setting_name, option_value),
             }
-            KeyCode::Down => {
-                match self.focus {
-                    FocusArea::Settings => self.next_setting(),
-                    FocusArea::Options => self.next_option(),
-                }
-                true
-            }
-            KeyCode::Left | KeyCode::Right => {
-                self.switch_focus();
-                true
-            }
-            KeyCode::Tab => {
-                self.switch_focus();
-                true
-            }
-            _ => false,
         }
+    }
+
+    fn handle_theme_change(&self, theme: &str) {
+        println!("Theme changed to: {}", theme);
+        // Your theme application logic here
+    }
+
+    fn handle_language_change(&self, language: &str) {
+        println!("Language changed to: {}", language);
+        // Your language switching logic here
+    }
+
+    fn handle_font_size_change(&self, size: &str) {
+        println!("Font size changed to: {}", size);
+        // Your font size adjustment logic here
+    }
+
+    fn handle_notifications_change(&self, setting: &str) {
+        println!("Notifications: {}", setting);
+        // Your notification logic here
     }
 }
 
-pub fn render_nested_selection(frame: &mut Frame, area: Rect, state: &mut NestedSelectionState) {
+pub fn render_nested_selection(f: &mut Frame, area: Rect, state: &mut NestedSelectionState) {
     // Split the area into two columns
     let columns = Layout::default()
         .direction(Direction::Horizontal)
@@ -155,11 +164,11 @@ pub fn render_nested_selection(frame: &mut Frame, area: Rect, state: &mut Nested
 
     // Left panel: Settings list
     let settings_area = columns[0];
-    render_settings_list(frame, settings_area, state);
+    render_settings_list(f, settings_area, state);
 
     // Right panel: Options for selected setting
     let options_area = columns[1];
-    render_options_list(frame, options_area, state);
+    render_options_list(f, options_area, state);
 
     // Optional: Add description area at the bottom
     if let Some(setting) = state.get_current_setting() {
@@ -168,11 +177,11 @@ pub fn render_nested_selection(frame: &mut Frame, area: Rect, state: &mut Nested
             .constraints([Constraint::Min(10), Constraint::Length(3)])
             .split(area)[1];
 
-        render_description(frame, description_area, setting);
+        render_description(f, description_area, setting);
     }
 }
 
-fn render_settings_list(frame: &mut Frame, area: Rect, state: &mut NestedSelectionState) {
+fn render_settings_list(f: &mut Frame, area: Rect, state: &mut NestedSelectionState) {
     let focus_style = if state.focus == FocusArea::Settings {
         Style::default()
             .fg(Color::Yellow)
@@ -224,10 +233,10 @@ fn render_settings_list(frame: &mut Frame, area: Rect, state: &mut NestedSelecti
             .title_style(focus_style),
     );
 
-    frame.render_stateful_widget(settings_list, area, &mut ListState::default());
+    f.render_stateful_widget(settings_list, area, &mut ListState::default());
 }
 
-fn render_options_list(frame: &mut Frame, area: Rect, state: &mut NestedSelectionState) {
+fn render_options_list(f: &mut Frame, area: Rect, state: &mut NestedSelectionState) {
     let focus_style = if state.focus == FocusArea::Options {
         Style::default()
             .fg(Color::Yellow)
@@ -282,7 +291,7 @@ fn render_options_list(frame: &mut Frame, area: Rect, state: &mut NestedSelectio
                 .title_style(focus_style),
         );
 
-        frame.render_stateful_widget(options_list, area, &mut ListState::default());
+        f.render_stateful_widget(options_list, area, &mut ListState::default());
     } else {
         let placeholder = Paragraph::new("No setting selected").block(
             Block::default()
@@ -290,11 +299,11 @@ fn render_options_list(frame: &mut Frame, area: Rect, state: &mut NestedSelectio
                 .border_style(border_style)
                 .title(" Options "),
         );
-        frame.render_widget(placeholder, area);
+        f.render_widget(placeholder, area);
     }
 }
 
-fn render_description(frame: &mut Frame, area: Rect, setting: &Setting) {
+fn render_description(f: &mut Frame, area: Rect, setting: &Setting) {
     let description = Paragraph::new(setting.description.clone())
         .block(
             Block::default()
@@ -303,7 +312,7 @@ fn render_description(frame: &mut Frame, area: Rect, setting: &Setting) {
         )
         .style(Style::default().fg(Color::Cyan));
 
-    frame.render_widget(description, area);
+    f.render_widget(description, area);
 }
 
 #[derive(PartialEq, Clone)]
