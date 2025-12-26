@@ -19,8 +19,15 @@ pub enum Action {
     DeleteRecording,
     DoubleLoopLen,
     HalfLoopLen,
+    ToggleMenu,
+    ToggleHelp,
+    MenuMoveDown,
+    MenuMoveUp,
+    MenuEnter,
+    MenuExit,
 }
 
+#[derive(Clone)]
 pub struct Keybindings {
     bindings: Vec<KeyAction>,
 }
@@ -29,14 +36,9 @@ impl Keybindings {
     pub fn new() -> Self {
         let bindings = vec![
             KeyAction {
-                key: KeyCode::Char('q'),
-                description: "Quit application",
-                action: Action::Quit,
-            },
-            KeyAction {
-                key: KeyCode::Char('Q'),
-                description: "Quit application",
-                action: Action::Quit,
+                key: KeyCode::Char(' '),
+                description: "Start/Overdub recording",
+                action: Action::StartRecording,
             },
             KeyAction {
                 key: KeyCode::Char('+'),
@@ -49,24 +51,9 @@ impl Keybindings {
                 action: Action::DecreaseBPM,
             },
             KeyAction {
-                key: KeyCode::Tab,
-                description: "Cycle Tabs",
-                action: Action::CycleTabs,
-            },
-            KeyAction {
-                key: KeyCode::BackTab,
-                description: "Reverse Cycle Tabs",
-                action: Action::RevCycleTabs,
-            },
-            KeyAction {
-                key: KeyCode::Char(' '),
+                key: KeyCode::Char('s'),
                 description: "Start/Stop Sequence",
                 action: Action::ToggleSequence,
-            },
-            KeyAction {
-                key: KeyCode::Enter,
-                description: "Start/Overdub recording",
-                action: Action::StartRecording,
             },
             KeyAction {
                 key: KeyCode::Backspace,
@@ -82,6 +69,56 @@ impl Keybindings {
                 key: KeyCode::Char('k'),
                 description: "Double Loop Length",
                 action: Action::DoubleLoopLen,
+            },
+            KeyAction {
+                key: KeyCode::Tab,
+                description: "Cycle Tabs",
+                action: Action::CycleTabs,
+            },
+            KeyAction {
+                key: KeyCode::BackTab,
+                description: "Reverse Cycle Tabs",
+                action: Action::RevCycleTabs,
+            },
+            KeyAction {
+                key: KeyCode::Esc,
+                description: "Show Menu",
+                action: Action::ToggleMenu,
+            },
+            KeyAction {
+                key: KeyCode::Char('m'),
+                description: "Show Menu",
+                action: Action::ToggleMenu,
+            },
+            KeyAction {
+                key: KeyCode::Char('?'),
+                description: "Show Help",
+                action: Action::ToggleHelp,
+            },
+            KeyAction {
+                key: KeyCode::Down,
+                description: "Move in menu",
+                action: Action::MenuMoveDown,
+            },
+            KeyAction {
+                key: KeyCode::Up,
+                description: "Move in menu",
+                action: Action::MenuMoveUp,
+            },
+            KeyAction {
+                key: KeyCode::Right,
+                description: "Enter in menu",
+                action: Action::MenuEnter,
+            },
+            KeyAction {
+                key: KeyCode::Left,
+                description: "Exit out of menu",
+                action: Action::MenuExit,
+            },
+            KeyAction {
+                key: KeyCode::Char('q'),
+                description: "Quit application",
+                action: Action::Quit,
             },
         ];
 
