@@ -8,8 +8,8 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use uncycle_core::{devices::TR8, prelude::*};
-use crate::app::menu::SettingDescription;
+use uncycle_core::prelude::*;
+use crate::app::menu::Setting;
 
 const DEFAULT_BPM: f32 = 120.0;
 
@@ -31,7 +31,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(settings: Vec<SettingDescription>) -> Self {
+    pub fn new(settings: Vec<Setting>) -> Self {
         Self {
             keybindings: Keybindings::new(),
             core: Arc::new(Mutex::new(UncycleCore::new(DEFAULT_BPM))),
@@ -59,21 +59,17 @@ impl App {
                 Action::ToggleHelp => self.toggle_tab_menu(PopupTab::Help),
                 Action::MenuMoveDown => match self.menu.settings.focus {
                     FocusArea::Settings => self.menu.settings.next_setting(),
-                    FocusArea::Options => {
-                        self.menu.settings.next_option();
-                        self.menu.settings.apply_current_setting();
-                    }
+                    FocusArea::Options => self.menu.settings.next_option(),
                 },
                 Action::MenuMoveUp => match self.menu.settings.focus {
                     FocusArea::Settings => self.menu.settings.previous_setting(),
-                    FocusArea::Options => {
-                        self.menu.settings.previous_option();
-                        self.menu.settings.apply_current_setting();
-                    }
+                    FocusArea::Options => self.menu.settings.previous_option(),
                 },
                 Action::MenuEnter => self.menu.settings.switch_focus(),
-
-                Action::MenuExit => self.menu.settings.switch_focus(),
+                Action::MenuExit => {
+                    self.menu.settings.switch_focus();
+                    self.menu.settings.apply_current_setting(&mut self.core.lock().unwrap());
+                },
             }
         } else {
             // Handle tab switching
@@ -114,11 +110,10 @@ impl App {
 pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     setup_midi_socket(app.core.clone(), app.log.clone());
 
-    // default to TR-8 for now
-    app.core
-        .lock()
-        .unwrap()
-        .set_device(SupportedDevice::from(TR8::init()));
+    // apply settings that have been chose from CLI
+    for setting in &app.menu.settings.settings {
+        (setting.apply_fn)(&mut app.core.lock().unwrap(), &setting);
+    }
 
     while !app.should_quit {
         terminal.draw(|f| ui(f, app))?;

@@ -1,16 +1,10 @@
+use uncycle_core::prelude::UncycleCore;
+
 #[derive(Debug, Clone)]
-pub struct SettingDescription {
+pub struct Setting {
     pub name: String,
     pub description: String,
     pub options: Vec<String>,
     pub selected_option: usize,
-    pub apply_fn: fn(&SettingDescription),
+    pub apply_fn: fn(&mut UncycleCore, &Setting),
 }
-
-impl Default for SettingDescription {
-    fn default() -> Self {
-        Self { name: String::new(), description: String::new(), options: Vec::new(), selected_option: 0, apply_fn: nop }
-    }
-}
-
-fn nop(_setting: &SettingDescription) {}

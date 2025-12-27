@@ -1,13 +1,13 @@
 use super::DeviceInterface;
 use heapless::String;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TR8 {
     running: bool,
 }
 
-impl TR8 {
-    pub fn init() -> Self {
+impl Default for TR8 {
+    fn default() -> Self {
         Self { running: false }
     }
 }
@@ -31,6 +31,10 @@ impl DeviceInterface for TR8 {
 
     fn manufacturer_to_str(&self) -> String<64> {
         String::try_from("Roland").unwrap()
+    }
+
+    fn id_to_str(&self) -> String<64> {
+        String::try_from("roland-tr8").unwrap()
     }
 }
 

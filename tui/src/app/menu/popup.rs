@@ -1,4 +1,4 @@
-use super::{NestedSelectionState, SettingDescription, help::HelpMenu};
+use super::{NestedSelectionState, Setting, help::HelpMenu};
 
 use ratatui::{
     prelude::*,
@@ -32,7 +32,7 @@ pub struct PopupMenu {
 }
 
 impl PopupMenu {
-    pub fn new(settings: Vec<SettingDescription>) -> Self {
+    pub fn new(settings: Vec<Setting>) -> Self {
         Self {
             is_active: false,
             tab: PopupTab::Menu,

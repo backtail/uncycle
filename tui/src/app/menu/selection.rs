@@ -1,8 +1,10 @@
-use super::setting::SettingDescription;
+use uncycle_core::prelude::UncycleCore;
+
+use super::setting::Setting;
 
 #[derive(Debug, Clone)]
 pub struct NestedSelectionState {
-    pub settings: Vec<SettingDescription>,
+    pub settings: Vec<Setting>,
     pub selected_setting: usize,
     pub selected_option: usize,
     pub focus: FocusArea,     // Track which area is focused
@@ -16,7 +18,7 @@ pub enum FocusArea {
 }
 
 impl NestedSelectionState {
-    pub fn new(settings: Vec<SettingDescription>) -> Self {
+    pub fn new(settings: Vec<Setting>) -> Self {
         Self {
             settings,
             selected_setting: 0,
@@ -73,7 +75,7 @@ impl NestedSelectionState {
         };
     }
 
-    pub fn get_current_setting(&self) -> Option<&SettingDescription> {
+    pub fn get_current_setting(&self) -> Option<&Setting> {
         self.settings.get(self.selected_setting)
     }
 
@@ -91,9 +93,9 @@ impl NestedSelectionState {
         }
     }
 
-    pub fn apply_current_setting(&mut self) {
+    pub fn apply_current_setting(&mut self, app: &mut UncycleCore) {
         if let Some(setting) = self.settings.get(self.selected_setting) {
-            (setting.apply_fn)(&setting);
+            (setting.apply_fn)(app, &setting);
         }
     }
 }

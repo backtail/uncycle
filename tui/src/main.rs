@@ -9,7 +9,11 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
+use crate::app::parse_cli;
+
 fn main() -> Result<()> {
+    let settings = parse_cli();
+
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -19,7 +23,7 @@ fn main() -> Result<()> {
 
     terminal.clear()?;
 
-    let mut app = App::new(Vec::new());
+    let mut app = App::new(settings);
 
     let result = run_app(&mut terminal, &mut app);
 

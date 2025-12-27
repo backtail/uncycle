@@ -1,6 +1,6 @@
 [package]
 name = "uncycle-tui"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "A real-time MIDI tool that extends existing hardware synth capabilities."
 authors = ["backtail <mail@maxgenson.de>"]
@@ -8,12 +8,14 @@ readme = "../README.md"
 repository = "https://github.com/backtail/uncycle"
 
 [dependencies]
-uncycle-core = { path = "../core/" }
+uncycle-core = { path = "../core/", features = [ "std" ] }
 
 # TUI deps
 crossterm = "0.29"
 ratatui = "0.29"
 tui-big-text = "0.7.3"
+clap = { version = "4.5", features = [ "derive" ]}
+strum = { version = "0.27", features = ["derive"] }
 
 # MIDI deps
 midir = "0.10"
