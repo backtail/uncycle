@@ -9,6 +9,7 @@ use std::{
     time::Duration,
 };
 use uncycle_core::{devices::TR8, prelude::*};
+use crate::app::menu::SettingDescription;
 
 const DEFAULT_BPM: f32 = 120.0;
 
@@ -30,13 +31,13 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(settings: Vec<SettingDescription>) -> Self {
         Self {
             keybindings: Keybindings::new(),
             core: Arc::new(Mutex::new(UncycleCore::new(DEFAULT_BPM))),
             log: Arc::new(Mutex::new(Logger::new())),
             tab: AppTab::Main,
-            menu: PopupMenu::new(),
+            menu: PopupMenu::new(settings),
             should_quit: false,
         }
     }

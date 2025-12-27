@@ -1,8 +1,8 @@
-use super::setting::Setting;
+use super::setting::SettingDescription;
 
 #[derive(Debug, Clone)]
 pub struct NestedSelectionState {
-    pub settings: Vec<Setting>,
+    pub settings: Vec<SettingDescription>,
     pub selected_setting: usize,
     pub selected_option: usize,
     pub focus: FocusArea,     // Track which area is focused
@@ -16,7 +16,7 @@ pub enum FocusArea {
 }
 
 impl NestedSelectionState {
-    pub fn new(settings: Vec<Setting>) -> Self {
+    pub fn new(settings: Vec<SettingDescription>) -> Self {
         Self {
             settings,
             selected_setting: 0,
@@ -73,7 +73,7 @@ impl NestedSelectionState {
         };
     }
 
-    pub fn get_current_setting(&self) -> Option<&Setting> {
+    pub fn get_current_setting(&self) -> Option<&SettingDescription> {
         self.settings.get(self.selected_setting)
     }
 
@@ -83,8 +83,7 @@ impl NestedSelectionState {
     }
 
     fn update_scroll(&mut self) {
-        // Simple scroll logic: if selected item is above/below visible area, adjust scroll
-        let visible_items = 10; // Adjust based on your UI
+        let visible_items = 10;
         if self.selected_setting < self.scroll_offset {
             self.scroll_offset = self.selected_setting;
         } else if self.selected_setting >= self.scroll_offset + visible_items {
@@ -94,38 +93,7 @@ impl NestedSelectionState {
 
     pub fn apply_current_setting(&mut self) {
         if let Some(setting) = self.settings.get(self.selected_setting) {
-            // This is where you trigger your application logic
-            let setting_name = &setting.name;
-            let option_value = &setting.options[setting.selected_option];
-
-            // Dispatch based on setting name
-            match setting_name.as_str() {
-                "Theme" => self.handle_theme_change(option_value),
-                "Language" => self.handle_language_change(option_value),
-                "Font Size" => self.handle_font_size_change(option_value),
-                "Notifications" => self.handle_notifications_change(option_value),
-                _ => println!("Setting '{}' changed to: {}", setting_name, option_value),
-            }
+            (setting.apply_fn)(&setting);
         }
-    }
-
-    fn handle_theme_change(&self, theme: &str) {
-        println!("Theme changed to: {}", theme);
-        // Your theme application logic here
-    }
-
-    fn handle_language_change(&self, language: &str) {
-        println!("Language changed to: {}", language);
-        // Your language switching logic here
-    }
-
-    fn handle_font_size_change(&self, size: &str) {
-        println!("Font size changed to: {}", size);
-        // Your font size adjustment logic here
-    }
-
-    fn handle_notifications_change(&self, setting: &str) {
-        println!("Notifications: {}", setting);
-        // Your notification logic here
     }
 }

@@ -5,8 +5,8 @@ mod selection;
 
 pub use popup::{PopupTab, PopupMenu};
 pub use selection::FocusArea;
+pub use setting::SettingDescription;
 
-use setting::Setting;
 use selection::{NestedSelectionState};
 
 use crate::App;
@@ -166,7 +166,7 @@ fn render_options_list(f: &mut Frame, area: Rect, state: &mut NestedSelectionSta
     }
 }
 
-fn render_description(f: &mut Frame, area: Rect, setting: &Setting) {
+fn render_description(f: &mut Frame, area: Rect, setting: &SettingDescription) {
     let description = Paragraph::new(setting.description.clone())
         .block(
             Block::default()

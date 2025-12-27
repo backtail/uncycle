@@ -1,4 +1,4 @@
-use super::{NestedSelectionState, Setting, help::HelpMenu};
+use super::{NestedSelectionState, SettingDescription, help::HelpMenu};
 
 use ratatui::{
     prelude::*,
@@ -32,48 +32,7 @@ pub struct PopupMenu {
 }
 
 impl PopupMenu {
-    pub fn new() -> Self {
-        let settings = vec![
-            Setting {
-                name: "Theme".to_string(),
-                description: "Choose the color theme for the application".to_string(),
-                options: vec!["Dark".to_string(), "Light".to_string(), "Auto".to_string()],
-                selected_option: 0,
-            },
-            Setting {
-                name: "Language".to_string(),
-                description: "Select your preferred language".to_string(),
-                options: vec![
-                    "English".to_string(),
-                    "Spanish".to_string(),
-                    "French".to_string(),
-                    "German".to_string(),
-                ],
-                selected_option: 0,
-            },
-            Setting {
-                name: "Font Size".to_string(),
-                description: "Adjust the font size for better readability".to_string(),
-                options: vec![
-                    "Small".to_string(),
-                    "Medium".to_string(),
-                    "Large".to_string(),
-                    "Extra Large".to_string(),
-                ],
-                selected_option: 1,
-            },
-            Setting {
-                name: "Notifications".to_string(),
-                description: "Configure notification preferences".to_string(),
-                options: vec![
-                    "Enabled".to_string(),
-                    "Disabled".to_string(),
-                    "Silent".to_string(),
-                ],
-                selected_option: 0,
-            },
-        ];
-
+    pub fn new(settings: Vec<SettingDescription>) -> Self {
         Self {
             is_active: false,
             tab: PopupTab::Menu,

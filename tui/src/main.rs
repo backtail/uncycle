@@ -19,7 +19,7 @@ fn main() -> Result<()> {
 
     terminal.clear()?;
 
-    let mut app = App::new();
+    let mut app = App::new(Vec::new());
 
     let result = run_app(&mut terminal, &mut app);
 
